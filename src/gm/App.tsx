@@ -8,6 +8,7 @@ import { SelectionPlaque } from './canvas/SelectionPlaque';
 import { TextEditor } from './canvas/TextEditor';
 import { AlignPanel } from './ui/AlignPanel';
 import { AssetManager } from './ui/dialogs/AssetManager';
+import { CloudDialog } from './ui/dialogs/CloudDialog';
 import { ImportDialog } from './ui/dialogs/ImportDialog';
 import { SceneFromMapDialog } from './ui/dialogs/SceneFromMapDialog';
 import {
@@ -41,6 +42,8 @@ function DialogHost() {
       return <SettingsDialog />;
     case 'storage':
       return <StorageDialog />;
+    case 'cloud':
+      return <CloudDialog />;
     case 'hotkeys':
       return <HotkeysDialog />;
     case 'disc':

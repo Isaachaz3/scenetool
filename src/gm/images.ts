@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react';
 import { THUMB_SIZE } from '../core/constants';
-import type { Id } from '../core/types';
+import { remoteFiles } from '../cloud/remote';
+import type { Asset, Id } from '../core/types';
 import { db } from '../db/db';
 import { BitmapCache } from '../render/bitmapCache';
 import { getGm } from '../state/store';
+
+/** Original file of an asset: from IndexedDB, or downloaded from the cloud and kept locally. */
+export async function getAssetBlob(asset: Asset): Promise<Blob | undefined> {
+  const local = (await db.blobs.get(asset.blobId))?.blob;
+  if (local) return local;
+  const remote = await remoteFiles.file?.(asset).catch(() => null);
+  if (!remote) return undefined;
+  await db.blobs.put({ id: asset.blobId, kind: 'file', blob: remote });
+  return remote;
+}
 
 /** Full-size images of the GM window, keyed by asset id. */
 export const gmImages = new BitmapCache(async (assetId) => {
   const asset = getGm().assets[assetId];
   if (!asset) return null;
-  return (await db.blobs.get(asset.blobId))?.blob;
+  return getAssetBlob(asset);
 });
 
 // --- thumbnails as object URLs ---------------------------------------------------------------
@@ -27,9 +38,13 @@ export function notifyThumb(thumbId: Id): void {
 async function loadThumb(thumbId: Id): Promise<string | undefined> {
   const cached = thumbUrls.get(thumbId);
   if (cached) return cached;
-  const rec = await db.blobs.get(thumbId);
-  if (!rec) return undefined;
-  const url = thumbUrls.get(thumbId) ?? URL.createObjectURL(rec.blob);
+  let blob = (await db.blobs.get(thumbId))?.blob;
+  if (!blob) {
+    blob = (await remoteFiles.thumb?.(thumbId).catch(() => null)) ?? undefined;
+    if (!blob) return undefined;
+    await db.blobs.put({ id: thumbId, kind: 'thumb', blob });
+  }
+  const url = thumbUrls.get(thumbId) ?? URL.createObjectURL(blob);
   thumbUrls.set(thumbId, url);
   return url;
 }

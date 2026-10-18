@@ -1,7 +1,7 @@
 import type { Asset, Id, Item, MeasureView, Scene, Size, Viewport } from '../core/types';
 import { playerZoom, viewportForScreen } from '../core/viewport';
-import { db } from '../db/db';
 import { t } from '../i18n/ru';
+import { getAssetBlob } from './images';
 import { chunkCount, chunks } from '../protocol/binary';
 import type { PlayerLink } from '../protocol/link';
 import { PresentationLink, WindowLink } from '../protocol/links';
@@ -274,9 +274,9 @@ export class PlayerHub {
         const hash = session.queue.shift()!;
         const asset = Object.values(getGm().assets).find((a) => a.hash === hash);
         if (!asset) continue;
-        const rec = await db.blobs.get(asset.blobId);
-        if (!rec) continue;
-        const buf = await rec.blob.arrayBuffer();
+        const blob = await getAssetBlob(asset);
+        if (!blob) continue;
+        const buf = await blob.arrayBuffer();
         const total = chunkCount(buf.byteLength);
         session.link.send(
           gmMessage({ type: 'asset:begin', hash, size: buf.byteLength, mime: asset.mime, total }),

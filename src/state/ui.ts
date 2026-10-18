@@ -10,6 +10,7 @@ export type Dialog =
   | { kind: 'assetManager'; tab?: DockTab; assetId?: Id }
   | { kind: 'settings' }
   | { kind: 'storage' }
+  | { kind: 'cloud' }
   | { kind: 'hotkeys' }
   | { kind: 'disc' };
 

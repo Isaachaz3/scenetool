@@ -14,7 +14,7 @@ import { db, putSetting, SCHEMA_VERSION } from '../db/db';
 import { t } from '../i18n/ru';
 import { flushScenes, markSaved } from '../state/persistence';
 import { dropHistory, getGm, refreshHistoryFlags, setGm } from '../state/store';
-import { makeThumbnail, notifyThumb } from './images';
+import { getAssetBlob, makeThumbnail, notifyThumb } from './images';
 
 /**
  * One .vttlite.zip: manifest.json, collections.json, scenes/*.json, assets/*.json and the
@@ -52,11 +52,11 @@ export async function exportBackup(): Promise<Blob> {
     addJson(`assets/${a.id}.json`, a);
     const path = blobPath(a.hash, a.mime);
     if (written.has(path)) continue;
-    const rec = await db.blobs.get(a.blobId);
-    if (!rec) continue;
+    const blob = await getAssetBlob(a);
+    if (!blob) continue;
     const f = new ZipPassThrough(path);
     zip.add(f);
-    f.push(new Uint8Array(await rec.blob.arrayBuffer()), true);
+    f.push(new Uint8Array(await blob.arrayBuffer()), true);
     written.add(path);
   }
   zip.end();

@@ -18,6 +18,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ASSET_TYPES } from '../../core/constants';
 import type { Asset, AssetType, Scene } from '../../core/types';
 import { t } from '../../i18n/ru';
@@ -72,9 +73,12 @@ export function AssetTile({
 
 export function SceneTile({ scene, active }: { scene: Scene; active: boolean }) {
   const url = useThumbUrl(scene.thumbId);
-  const [menu, setMenu] = useState(false);
+  // Anchor of the open menu. The menu lives in a portal: the tile row scrolls and would clip it.
+  const [menu, setMenu] = useState<{ left: number; bottom: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  useClickOutside(ref, () => setMenu(false), menu);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const close = () => setMenu(null);
+  useClickOutside(ref, close, !!menu, menuRef);
   return (
     <div className={'tile scene-tile' + (active ? ' active' : '')} ref={ref}>
       <button type="button" className="tile-main" onClick={() => openScene(scene.id)} title={scene.name}>
@@ -83,42 +87,55 @@ export function SceneTile({ scene, active }: { scene: Scene; active: boolean }) 
         </span>
         <span className="tile-name">{scene.name}</span>
       </button>
-      <button type="button" className="tile-more" aria-label="…" onClick={() => setMenu(!menu)}>
+      <button
+        type="button"
+        className="tile-more"
+        aria-label="…"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setMenu(
+            menu ? null : { left: Math.min(r.left, innerWidth - 240), bottom: innerHeight - r.top + 4 },
+          );
+        }}
+      >
         <MoreHorizontal size={16} />
       </button>
-      {menu ? (
-        <div className="menu panel tile-menu">
-          <button
-            type="button"
-            onClick={async () => {
-              setMenu(false);
-              const name = await promptDialog(t.scene.namePrompt, scene.name);
-              if (name?.trim()) renameScene(scene.id, name.trim());
-            }}
-          >
-            <Pencil size={16} /> {t.scene.rename}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMenu(false);
-              duplicateScene(scene.id);
-            }}
-          >
-            <Copy size={16} /> {t.scene.duplicate}
-          </button>
-          <button
-            type="button"
-            className="danger"
-            onClick={async () => {
-              setMenu(false);
-              if (await confirmDialog(t.scene.deleteConfirm(scene.name))) await deleteScene(scene.id);
-            }}
-          >
-            <Trash2 size={16} /> {t.scene.delete}
-          </button>
-        </div>
-      ) : null}
+      {menu
+        ? createPortal(
+            <div className="menu panel tile-menu" ref={menuRef} style={menu}>
+              <button
+                type="button"
+                onClick={async () => {
+                  close();
+                  const name = await promptDialog(t.scene.namePrompt, scene.name);
+                  if (name?.trim()) renameScene(scene.id, name.trim());
+                }}
+              >
+                <Pencil size={16} /> {t.scene.rename}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  duplicateScene(scene.id);
+                }}
+              >
+                <Copy size={16} /> {t.scene.duplicate}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={async () => {
+                  close();
+                  if (await confirmDialog(t.scene.deleteConfirm(scene.name))) await deleteScene(scene.id);
+                }}
+              >
+                <Trash2 size={16} /> {t.scene.delete}
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

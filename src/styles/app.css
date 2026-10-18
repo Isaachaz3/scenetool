@@ -642,10 +642,8 @@ select:focus,
 }
 
 .tile-menu {
-  position: absolute;
-  top: 30px;
-  right: 4px;
-  z-index: 10;
+  position: fixed;
+  z-index: 50;
 }
 
 .menu {
@@ -1115,4 +1113,28 @@ kbd {
 
 .storage-table tr.unused td {
   color: var(--warn);
+}
+
+.cloud-chip {
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.cloud-chip.idle {
+  color: var(--ok);
+}
+
+.cloud-chip.error {
+  color: var(--danger);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

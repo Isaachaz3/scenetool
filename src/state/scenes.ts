@@ -13,6 +13,7 @@ import type {
   Viewport,
 } from '../core/types';
 import { fitRect } from '../core/viewport';
+import { recordDeletion } from '../cloud/remote';
 import { db, putSetting } from '../db/db';
 import { t } from '../i18n/ru';
 import { newImageItem } from './items';
@@ -78,7 +79,8 @@ export function duplicateScene(id: Id): void {
   addScene(copy, false);
 }
 
-export async function deleteScene(id: Id): Promise<void> {
+/** `fromCloud`: the deletion came from another device, so it is not sent back. */
+export async function deleteScene(id: Id, opts: { fromCloud?: boolean } = {}): Promise<void> {
   const s = getGm();
   if (!s.scenes[id]) return;
   const rest = Object.values(s.scenes)
@@ -95,6 +97,7 @@ export async function deleteScene(id: Id): Promise<void> {
   dropHistory(id);
   forgetSaved(id);
   await db.scenes.delete(id);
+  if (!opts.fromCloud) await recordDeletion({ kind: 'scene', id, at: Date.now() });
 }
 
 /** World bounds of the maps of a scene, or of all its items when there is no map. */

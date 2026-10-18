@@ -25,7 +25,11 @@ export function flushScenes(): Promise<void> {
   clearTimeout(timer);
   timer = undefined;
   const dirty = dirtyScenes();
-  if (dirty.length === 0) return writing;
+  if (dirty.length === 0) {
+    // A scene can be marked saved after it looked dirty (one written by the cloud sync).
+    if (getGm().saveState === 'dirty') useGm.setState({ saveState: 'saved' });
+    return writing;
+  }
   for (const s of dirty) saved.set(s.id, s);
   useGm.setState({ saveState: 'saving' });
   writing = writing

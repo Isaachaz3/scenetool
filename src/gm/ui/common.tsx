@@ -268,17 +268,20 @@ export function ColorSwatches({
 }
 
 /** Closes when clicking outside of `ref`. */
+/** `extra`: more elements that count as inside, like a menu rendered in a portal. */
 export function useClickOutside(
   ref: React.RefObject<HTMLElement | null>,
   onOutside: () => void,
   active = true,
+  extra?: React.RefObject<HTMLElement | null>,
 ) {
   useEffect(() => {
     if (!active) return;
     const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onOutside();
+      const target = e.target as Node;
+      if (ref.current && !ref.current.contains(target) && !extra?.current?.contains(target)) onOutside();
     };
     window.addEventListener('pointerdown', onDown, true);
     return () => window.removeEventListener('pointerdown', onDown, true);
-  }, [ref, onOutside, active]);
+  }, [ref, onOutside, active, extra]);
 }

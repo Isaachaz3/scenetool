@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import type { Asset, AppSettings, Collection, Id } from '../core/types';
+import { recordDeletion } from '../cloud/remote';
 import { db, putSetting } from '../db/db';
 import { gmImages, notifyThumb } from '../gm/images';
 import { activeScene, dropHistory, getGm, refreshHistoryFlags, setGm, useGm } from './store';
@@ -22,10 +23,11 @@ export async function updateAsset(id: Id, patch: Partial<Omit<Asset, 'id'>>): Pr
   await db.assets.put(next);
 }
 
-/** Removes the asset, its files and its instances in every scene. */
-export async function deleteAsset(id: Id): Promise<void> {
+/** Removes the asset, its files and its instances in every scene (`fromCloud`: not sent back). */
+export async function deleteAsset(id: Id, opts: { fromCloud?: boolean } = {}): Promise<void> {
   const asset = getGm().assets[id];
   if (!asset) return;
+  const fileShared = Object.values(getGm().assets).some((a) => a.id !== id && a.hash === asset.hash);
   const touched: Id[] = [];
   setGm((d) => {
     delete d.assets[id];
@@ -60,6 +62,15 @@ export async function deleteAsset(id: Id): Promise<void> {
     await db.blobs.bulkDelete([asset.blobId, asset.thumbId]);
   });
   notifyThumb(asset.thumbId);
+  if (!opts.fromCloud) {
+    await recordDeletion({
+      kind: 'asset',
+      id,
+      at: Date.now(),
+      thumbId: asset.thumbId,
+      ...(fileShared ? {} : { hash: asset.hash }),
+    });
+  }
 }
 
 export async function createCollection(name: string): Promise<Collection> {
