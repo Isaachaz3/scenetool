@@ -5,3 +5,4 @@ dist
 # Large test fixtures (real map exports) are kept out of git, see fixtures/README.md
 fixtures/*
 !fixtures/README.md
+*.tsbuildinfo
