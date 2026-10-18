@@ -31,15 +31,15 @@ npm run format     # Prettier
 
 ## Деплой
 
-`dist/` — обычная статика с относительными путями (`base: './'`), поэтому её можно положить в любой
-подкаталог. Для GitHub Pages:
+Сайт публикует GitHub Actions (`.github/workflows/deploy.yml`): при каждом пуше в рабочую ветку
+он запускает тесты, собирает `dist/` и выкладывает его на GitHub Pages.
 
-1. `npm run build`.
-2. Опубликовать содержимое `dist/` в ветку `gh-pages` (например, `npx gh-pages -d dist`) или
-   загрузить его через Actions → Pages.
-3. В настройках репозитория: Settings → Pages → Source — ветка `gh-pages`.
+Один раз в настройках репозитория: Settings → Pages → Build and deployment → Source — **GitHub
+Actions**. Режим «Deploy from a branch» не подходит: он отдаёт исходники без сборки, и страница
+остаётся белой. Перезапустить публикацию вручную: Actions → Deploy to GitHub Pages → Run workflow.
 
-Автоматический деплой через GitHub Actions запланирован на этап 3.
+`dist/` — обычная статика с относительными путями (`base: './'`), поэтому её можно положить и на
+любой другой хостинг, в любой подкаталог.
 
 ## Как пользоваться
 
