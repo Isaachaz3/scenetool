@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_GRID, DISC_COLORS } from '../../../core/constants';
 import { formatScale, parseScale } from '../../../core/scale';
-import { t, formatBytes } from '../../../i18n/ru';
+import { t } from '../../../i18n/ru';
 import { updateSettings } from '../../../state/assets';
 import { addDisc } from '../../../state/items';
 import { addScene, newScene, nextSceneName } from '../../../state/scenes';
@@ -164,46 +164,6 @@ export function SettingsDialog() {
   );
 }
 
-export function StorageDialog() {
-  const [estimate, setEstimate] = useState<StorageEstimate | null>(null);
-  const [persisted, setPersisted] = useState<boolean | null>(null);
-  const assets = useGm((s) => Object.keys(s.assets).length);
-  const scenes = useGm((s) => Object.keys(s.scenes).length);
-  useEffect(() => {
-    void navigator.storage
-      ?.estimate?.()
-      .then(setEstimate)
-      .catch(() => setEstimate(null));
-    void navigator.storage
-      ?.persisted?.()
-      .then(setPersisted)
-      .catch(() => setPersisted(null));
-  }, []);
-  return (
-    <Modal title={t.storage.title} onClose={close}>
-      <p>
-        {estimate?.usage !== undefined && estimate.quota !== undefined
-          ? t.storage.used(formatBytes(estimate.usage), formatBytes(estimate.quota))
-          : t.storage.unknown}
-      </p>
-      <p>{persisted ? t.storage.persisted : t.storage.notPersisted}</p>
-      {!persisted && navigator.storage?.persist ? (
-        <button
-          type="button"
-          className="btn"
-          onClick={() => void navigator.storage.persist().then(setPersisted)}
-        >
-          {t.storage.requestPersist}
-        </button>
-      ) : null}
-      <p className="muted">
-        {t.storage.assets(assets)} · {t.storage.scenes(scenes)}
-      </p>
-      <p className="muted">{t.storage.backupLater}</p>
-    </Modal>
-  );
-}
-
 export function HotkeysDialog() {
   return (
     <Modal title={t.hotkeys.title} onClose={close}>
@@ -227,10 +187,42 @@ export function HotkeysDialog() {
 export function ConfirmPrompt() {
   const confirm = useUi((s) => s.confirm);
   const prompt = useUi((s) => s.prompt);
+  const choice = useUi((s) => s.choice);
   const [value, setValue] = useState('');
   useEffect(() => {
     if (prompt) setValue(prompt.value);
   }, [prompt]);
+  if (choice) {
+    const done = (v: string | null) => {
+      useUi.setState({ choice: null });
+      choice.resolve(v);
+    };
+    return (
+      <Modal
+        title={t.common.confirm}
+        onClose={() => done(null)}
+        footer={
+          <>
+            <button type="button" className="btn" onClick={() => done(null)}>
+              {t.common.cancel}
+            </button>
+            {choice.options.map((o, i) => (
+              <button
+                key={o.value}
+                type="button"
+                className={'btn' + (i === 0 ? ' primary' : '')}
+                onClick={() => done(o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </>
+        }
+      >
+        <p>{choice.text}</p>
+      </Modal>
+    );
+  }
   if (confirm) {
     const done = (ok: boolean) => {
       useUi.setState({ confirm: null });

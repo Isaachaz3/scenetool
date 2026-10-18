@@ -1,7 +1,17 @@
 import { nanoid } from 'nanoid';
 import { DEFAULT_FOG, DEFAULT_GRID } from '../core/constants';
 import { imageBounds, rectUnion, type Rect } from '../core/geometry';
-import type { Asset, GridSettings, Id, ImageGrid, Item, Scene, Size, Viewport } from '../core/types';
+import type {
+  Asset,
+  FogSettings,
+  GridSettings,
+  Id,
+  ImageGrid,
+  Item,
+  Scene,
+  Size,
+  Viewport,
+} from '../core/types';
 import { fitRect } from '../core/viewport';
 import { db, putSetting } from '../db/db';
 import { t } from '../i18n/ru';
@@ -128,6 +138,15 @@ export function updateGrid(patch: Partial<GridSettings>, key?: string): void {
   changeScene(
     (d) => {
       Object.assign(d.grid, patch);
+    },
+    { key },
+  );
+}
+
+export function updateFog(patch: Partial<FogSettings>, key?: string): void {
+  changeScene(
+    (d) => {
+      Object.assign(d.fog, patch);
     },
     { key },
   );

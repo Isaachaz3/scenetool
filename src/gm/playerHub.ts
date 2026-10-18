@@ -1,4 +1,4 @@
-import type { Asset, Id, Item, Scene, Size, Viewport } from '../core/types';
+import type { Asset, Id, Item, MeasureView, Scene, Size, Viewport } from '../core/types';
 import { playerZoom, viewportForScreen } from '../core/viewport';
 import { db } from '../db/db';
 import { t } from '../i18n/ru';
@@ -23,6 +23,7 @@ class Session {
   projection: PlayerScene | null = null;
   view: Viewport | null = null;
   ref: Size | undefined;
+  measure: MeasureView | null = null;
 
   constructor(readonly link: PlayerLink) {}
 }
@@ -56,6 +57,10 @@ export class PlayerHub {
   private nextViewDuration = 0;
   private memo: { scene?: Scene; assets?: Record<Id, Asset>; base?: PlayerScene } = {};
   private dragCache = new Map<Id, Item>();
+  private measure: MeasureView | null = null;
+  private pointerTimer: ReturnType<typeof setTimeout> | undefined;
+  private pointerLast = 0;
+  private pointerPending: { x: number; y: number; active: boolean } | null = null;
 
   init(): void {
     useGm.subscribe((s, prev) => {
@@ -67,6 +72,10 @@ export class PlayerHub {
       ) {
         if (!s.drag) this.dragCache.clear();
         if (getUi().follow && s.activeSceneId === prev.activeSceneId) this.followGm(prev);
+        this.schedule();
+      }
+      if (s.settings !== prev.settings) {
+        for (const session of this.sessions) if (session.ready) this.sendSettings(session);
         this.schedule();
       }
     });
@@ -124,7 +133,9 @@ export class PlayerHub {
         session.ready = true;
         session.has = new Set(msg.cached);
         session.queue = [];
+        session.measure = null;
         this.sendSnapshot(session);
+        this.sendSettings(session);
         break;
       case 'screen': {
         session.screen = { width: msg.width, height: msg.height };
@@ -199,19 +210,59 @@ export class PlayerHub {
     const next = this.projection();
     const duration = this.nextViewDuration;
     this.nextViewDuration = 0;
+    const measure = getGm().settings.playerDefaults.ruler ? this.measure : null;
     for (const session of this.sessions) {
       if (!session.ready || session.link.state === 'closed') continue;
       const prev = session.projection;
       if (!prev || !next || prev.id !== next.id) {
         this.sendSnapshot(session);
-        continue;
+      } else {
+        const diff = diffProjection(prev, next);
+        session.projection = next;
+        if (diff) session.link.send(gmMessage({ type: 'scene:diff', sceneId: next.id, diff }));
+        if (scene && (session.view !== scene.playerViewport || session.ref !== scene.playerViewRef)) {
+          this.sendView(session, duration);
+        }
       }
-      const diff = diffProjection(prev, next);
-      session.projection = next;
-      if (diff) session.link.send(gmMessage({ type: 'scene:diff', sceneId: next.id, diff }));
-      if (scene && (session.view !== scene.playerViewport || session.ref !== scene.playerViewRef)) {
-        this.sendView(session, duration);
+      if (session.measure !== measure) {
+        session.measure = measure;
+        session.link.send(gmMessage({ type: 'measure', measure }));
       }
+    }
+  }
+
+  private sendSettings(session: Session) {
+    const pd = getGm().settings.playerDefaults;
+    session.link.send(gmMessage({ type: 'settings', ruler: pd.ruler, pointer: pd.pointer }));
+  }
+
+  /** Ruler or movement line shown to players while it is being dragged (null hides it). */
+  setMeasure(m: MeasureView | null): void {
+    this.measure = m;
+    this.schedule();
+  }
+
+  /** Laser pointer: at most 30 messages per second, the latest position always arrives. */
+  pointer(x: number, y: number, active: boolean): void {
+    this.pointerPending = { x, y, active };
+    const wait = SEND_INTERVAL - (performance.now() - this.pointerLast);
+    if (wait <= 0 || !active) {
+      this.flushPointer();
+    } else if (!this.pointerTimer) {
+      this.pointerTimer = setTimeout(() => this.flushPointer(), wait);
+    }
+  }
+
+  private flushPointer() {
+    clearTimeout(this.pointerTimer);
+    this.pointerTimer = undefined;
+    const p = this.pointerPending;
+    this.pointerPending = null;
+    if (!p || !getGm().settings.playerDefaults.pointer) return;
+    this.pointerLast = performance.now();
+    for (const session of this.sessions) {
+      if (session.ready && session.link.state !== 'closed')
+        session.link.send(gmMessage({ type: 'pointer', ...p }));
     }
   }
 

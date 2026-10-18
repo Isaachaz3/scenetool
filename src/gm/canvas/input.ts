@@ -2,13 +2,22 @@ import type Konva from 'konva';
 import { useEffect, type RefObject } from 'react';
 import { rectsIntersect, sub, type Rect } from '../../core/geometry';
 import type { Id, Vec2, Viewport } from '../../core/types';
-import { panBy, screenToWorld, zoomAt } from '../../core/viewport';
+import { panBy, screenToWorld, worldToScreen, zoomAt } from '../../core/viewport';
 import { cloneItems, snapFor } from '../../state/items';
 import { setGmViewport } from '../../state/scenes';
 import { activeScene, changeScene, getGm, useGm } from '../../state/store';
 import { finishTextEdit, startTextEdit } from '../../state/text';
 import { getUi } from '../../state/ui';
 import { itemNodes, lastPointer, stageRef, useCanvasUi } from './canvasState';
+import {
+  cancelPolygon,
+  finishPolygon,
+  hoverPolygon,
+  polygonActive,
+  setMeasure,
+  startToolGesture,
+  type ToolGesture,
+} from './tools';
 
 type Gesture =
   | { kind: 'pan'; start: Vec2; view: Viewport; moved: boolean; clearOnClick: boolean }
@@ -21,8 +30,10 @@ type Gesture =
       copy: boolean;
       moved: boolean;
       collapseTo?: Id; // click without moving inside a multi-selection selects just this item
+      measure?: boolean; // Movement mode: a ruler follows the token
     }
-  | { kind: 'band'; start: Vec2; startWorld: Vec2; additive: boolean; moved: boolean };
+  | { kind: 'band'; start: Vec2; startWorld: Vec2; additive: boolean; moved: boolean }
+  | { kind: 'tool'; start: Vec2; handler: ToolGesture; moved: boolean };
 
 const DRAG_THRESHOLD = 3; // screen px
 
@@ -56,6 +67,10 @@ function toWorld(p: Vec2): Vec2 {
   return screenToWorld(p, view(), getUi().screen);
 }
 
+function toScreen(p: Vec2): Vec2 {
+  return worldToScreen(p, view(), getUi().screen);
+}
+
 /** Items whose on-screen box meets the band (locked items are left out). */
 function itemsInBand(band: Rect): Id[] {
   const scene = activeScene();
@@ -86,8 +101,15 @@ const gestureState: { gesture: Gesture | null } = { gesture: null };
 
 /** Esc: drops the current drag, pan or band; a dragged item returns to its place. */
 export function cancelGesture(): boolean {
-  if (!gestureState.gesture) return false;
+  const gesture = gestureState.gesture;
+  if (!gesture) {
+    if (!polygonActive()) return false;
+    cancelPolygon();
+    return true;
+  }
   gestureState.gesture = null;
+  if (gesture.kind === 'tool') gesture.handler.cancel();
+  if (gesture.kind === 'drag' && gesture.measure) setMeasure(null);
   useGm.setState({ drag: null });
   endGesture();
   return true;
@@ -109,7 +131,8 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       if (!scene || g.gesture) return;
       const p = local(e);
       const world = toWorld(p);
-      const { tool, selection, textEdit } = getGm();
+      const { tool, selection, textEdit, measureMode } = getGm();
+      useCanvasUi.setState({ contextMenu: null });
       const panRequested = e.button === 1 || (e.button === 0 && getUi().spaceDown);
       if (panRequested) {
         e.preventDefault();
@@ -127,10 +150,24 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       const item = hit.id ? scene.items[hit.id] : undefined;
 
       if (e.button === 2) {
-        if (item && !selection.includes(item.id)) useGm.setState({ selection: [item.id] });
+        if (!item) return;
+        if (!selection.includes(item.id)) useGm.setState({ selection: [item.id] });
+        useCanvasUi.setState({ contextMenu: p });
         return;
       }
       if (e.button !== 0) return;
+
+      // Movement: drag a token with a ruler from its start; elsewhere the tool measures.
+      const movement =
+        tool === 'measure' && measureMode === 'movement' && item && !item.locked && item.layer !== 'fog';
+      if (!movement && (tool === 'measure' || tool === 'pointer' || tool === 'draw' || tool === 'fog')) {
+        const handler = startToolGesture(world, p, e, item, toScreen);
+        if (handler) {
+          g.gesture = { kind: 'tool', start: p, handler, moved: false };
+          useCanvasUi.setState({ gesture: 'tool' });
+        }
+        return;
+      }
 
       if (tool === 'text') {
         e.preventDefault(); // keep focus in the editor that is about to open
@@ -138,7 +175,7 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
         else startTextEdit(null, world);
         return;
       }
-      if (tool !== 'move' && tool !== 'select') return;
+      if (!movement && tool !== 'move' && tool !== 'select') return;
 
       if (item && !item.locked) {
         let sel = selection;
@@ -166,9 +203,10 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
           startWorld: world,
           leadId: item.id,
           orig,
-          copy: e.altKey,
+          copy: e.altKey && !movement,
           moved: false,
           collapseTo,
+          measure: !!movement,
         };
         useCanvasUi.setState({ gesture: 'drag' });
         return;
@@ -187,12 +225,17 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       const p = local(e);
       lastPointer.world = toWorld(p);
       const gesture = g.gesture;
-      if (!gesture) return;
+      if (!gesture) {
+        if (polygonActive() && e.target instanceof Node && el.contains(e.target)) hoverPolygon(toWorld(p), e);
+        return;
+      }
       const dist = Math.hypot(p.x - gesture.start.x, p.y - gesture.start.y);
       if (!gesture.moved && dist < DRAG_THRESHOLD) return;
       gesture.moved = true;
       if (gesture.kind === 'pan') {
         setGmViewport(panBy(gesture.view, sub(p, gesture.start)));
+      } else if (gesture.kind === 'tool') {
+        gesture.handler.move(toWorld(p), e);
       } else if (gesture.kind === 'drag') {
         const scene = activeScene();
         const lead = scene?.items[gesture.leadId];
@@ -208,7 +251,8 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
         const positions: Record<Id, Vec2> = {};
         for (const [id, o] of Object.entries(gesture.orig))
           positions[id] = { x: o.x + delta.x, y: o.y + delta.y };
-        useGm.setState({ drag: { positions, copy: gesture.copy } });
+        useGm.setState({ drag: { positions, copy: gesture.copy, ghost: gesture.measure } });
+        if (gesture.measure) setMeasure([leadOrig, positions[gesture.leadId]]);
       } else {
         const world = toWorld(p);
         const a = gesture.startWorld;
@@ -223,15 +267,18 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       }
     };
 
-    const onPointerUp = () => {
+    const onPointerUp = (e: PointerEvent) => {
       const gesture = g.gesture;
       if (!gesture) return;
       g.gesture = null;
-      if (gesture.kind === 'pan') {
+      if (gesture.kind === 'tool') {
+        gesture.handler.up(toWorld(local(e)), e);
+      } else if (gesture.kind === 'pan') {
         if (!gesture.moved && gesture.clearOnClick) useGm.setState({ selection: [] });
       } else if (gesture.kind === 'drag') {
         const drag = getGm().drag;
         useGm.setState({ drag: null });
+        if (gesture.measure) setMeasure(null);
         if (!gesture.moved || !drag) {
           if (gesture.collapseTo) useGm.setState({ selection: [gesture.collapseTo] });
         } else {
@@ -268,6 +315,11 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
     const onDblClick = (e: MouseEvent) => {
       const scene = activeScene();
       if (!scene) return;
+      if (polygonActive()) {
+        finishPolygon();
+        return;
+      }
+      if (getGm().tool === 'draw' || getGm().tool === 'fog' || getGm().tool === 'pointer') return;
       const hit = hitTest(local(e));
       const item = hit.id ? scene.items[hit.id] : undefined;
       if (!item) return;

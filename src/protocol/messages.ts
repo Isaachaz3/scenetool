@@ -1,3 +1,4 @@
+import type { MeasureView } from '../core/types';
 import type { PlayerScene, SceneDiff } from './projection';
 
 export const PROTOCOL_VERSION = 1;
@@ -21,7 +22,10 @@ export type GmMessage =
   | ({ type: 'scene:diff'; sceneId: string; diff: SceneDiff } & V)
   | ({ type: 'asset:begin'; hash: string; size: number; mime: string; total: number } & V)
   | ({ type: 'asset:end'; hash: string } & V)
-  | ({ type: 'view:set' } & ViewMessage & V);
+  | ({ type: 'view:set' } & ViewMessage & V)
+  | ({ type: 'measure'; measure: MeasureView | null } & V)
+  | ({ type: 'pointer'; x: number; y: number; active: boolean } & V) // active: false = released
+  | ({ type: 'settings'; ruler: boolean; pointer: boolean } & V);
 
 export type GmMessageType = GmMessage['type'];
 export type PlayerMessageType = PlayerMessage['type'];
@@ -39,6 +43,9 @@ const GM_TYPES: ReadonlySet<string> = new Set<GmMessageType>([
   'asset:begin',
   'asset:end',
   'view:set',
+  'measure',
+  'pointer',
+  'settings',
 ]);
 const PLAYER_TYPES: ReadonlySet<string> = new Set<PlayerMessageType>(['hello', 'screen', 'need-assets']);
 

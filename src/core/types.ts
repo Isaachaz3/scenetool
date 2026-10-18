@@ -141,6 +141,7 @@ export interface DiscToken extends BaseItem {
   color: string;
   text: string;
   sizeCells: number;
+  label?: string;
 } // plain numbered circle
 export interface DrawingItem extends BaseItem {
   kind: 'drawing';
@@ -173,4 +174,18 @@ export interface AppSettings {
   playerDefaults: { grid: boolean; ruler: boolean; pointer: boolean };
   fogGmOpacity: number;
   syncViewDuration: number; // ms
+}
+
+/** A ruler or movement line as shown on both screens. */
+export interface MeasureView {
+  points: Vec2[];
+  label: string;
+}
+
+export interface DrawStyle {
+  stroke: string;
+  strokeWidth: number; // world units
+  fill: boolean;
+  fillColor: string;
+  opacity: number;
 }

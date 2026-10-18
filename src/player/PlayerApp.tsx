@@ -2,13 +2,16 @@ import { Maximize } from 'lucide-react';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Layer, Stage } from 'react-konva';
 import { sortItems } from '../core/items';
-import type { Item } from '../core/types';
+import type { FogShape, Item } from '../core/types';
 import { t } from '../i18n/ru';
 import type { AssetRef, PlayerScene } from '../protocol/projection';
 import { useBitmap } from '../render/bitmapCache';
+import { FogLayerShape } from '../render/FogLayer';
 import { GridShape } from '../render/GridShape';
 import { ItemShape } from '../render/ItemShape';
-import { playerImages, sendScreen, usePlayer } from './session';
+import { MeasureShape } from '../render/MeasureShape';
+import { PointerTrailShape } from '../render/PointerTrail';
+import { playerImages, pointerTrail, sendScreen, usePlayer } from './session';
 
 function useWindowSize() {
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -34,10 +37,21 @@ const PlayerItem = memo(function PlayerItem({ item, asset: ref }: { item: Item; 
   );
 });
 
-function SceneLayers({ scene }: { scene: PlayerScene }) {
+function SceneLayers({ scene, zoom }: { scene: PlayerScene; zoom: number }) {
   const sorted = useMemo(() => sortItems(Object.values(scene.items)), [scene.items]);
   const maps = sorted.filter((it) => it.layer === 'map');
-  const rest = sorted.filter((it) => it.layer !== 'map');
+  const rest = sorted.filter((it) => it.layer !== 'map' && it.layer !== 'fog');
+  const measure = usePlayer((s) => (s.show.ruler ? s.measure : null));
+  const showPointer = usePlayer((s) => s.show.pointer);
+  const fog = useMemo(
+    () => ({
+      shapes: sorted.filter((it): it is FogShape => it.kind === 'fog'),
+      fill: scene.fog.fill,
+      color: scene.fog.color,
+      opacity: 1,
+    }),
+    [sorted, scene.fog],
+  );
   const g = scene.grid;
   const look = useMemo(
     () => ({ color: g.color, opacity: g.opacity, lineWidth: g.lineWidth, lineStyle: g.lineStyle }),
@@ -67,7 +81,12 @@ function SceneLayers({ scene }: { scene: PlayerScene }) {
             asset={it.kind === 'image' ? scene.assets[it.assetId] : undefined}
           />
         ))}
+        {measure ? <MeasureShape measure={measure} zoom={zoom} /> : null}
       </Layer>
+      <Layer listening={false}>
+        <FogLayerShape look={fog} />
+      </Layer>
+      <Layer listening={false}>{showPointer ? <PointerTrailShape trail={pointerTrail} /> : null}</Layer>
     </>
   );
 }
@@ -120,7 +139,7 @@ export function PlayerApp() {
         scaleY={view.zoom}
         listening={false}
       >
-        {scene ? <SceneLayers scene={scene} /> : null}
+        {scene ? <SceneLayers scene={scene} zoom={view.zoom} /> : null}
       </Stage>
       {!heard ? (
         <div className="player-message">{mode === 'none' ? t.player.noOpener : t.player.waiting}</div>

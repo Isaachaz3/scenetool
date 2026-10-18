@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Viewport } from '../core/types';
+import type { MeasureView, Viewport } from '../core/types';
 import { lerpViewport } from '../core/viewport';
 import { AssetAssembler, decodeFrame } from '../protocol/binary';
 import type { GmLink } from '../protocol/link';
@@ -7,6 +7,7 @@ import { OpenerLink, ReceiverLink } from '../protocol/links';
 import { playerMessage, type GmMessage, type ViewMessage } from '../protocol/messages';
 import { applyDiff, sceneHashes, type PlayerScene } from '../protocol/projection';
 import { BitmapCache } from '../render/bitmapCache';
+import { PointerTrail } from '../render/PointerTrail';
 
 const HINT_CHANNEL = 'vtt-lite';
 
@@ -17,6 +18,8 @@ interface PlayerState {
   scene: PlayerScene | null;
   view: Viewport;
   heard: boolean; // got anything from the GM
+  measure: MeasureView | null;
+  show: { ruler: boolean; pointer: boolean };
 }
 
 export const usePlayer = create<PlayerState>(() => ({
@@ -24,7 +27,12 @@ export const usePlayer = create<PlayerState>(() => ({
   scene: null,
   view: { x: 0, y: 0, zoom: 1 },
   heard: false,
+  measure: null,
+  show: { ruler: true, pointer: true },
 }));
+
+/** The GM's laser pointer, drawn by the player canvas. */
+export const pointerTrail = new PointerTrail();
 
 /** Original files by hash; kept in memory only, gone after a reload. */
 const files = new Map<string, Blob>();
@@ -94,6 +102,17 @@ function onMessage(msg: GmMessage) {
     }
     case 'view:set':
       setView(msg);
+      break;
+    case 'measure':
+      usePlayer.setState({ measure: msg.measure });
+      break;
+    case 'pointer':
+      if (msg.active) pointerTrail.push(msg.x, msg.y);
+      else pointerTrail.release();
+      break;
+    case 'settings':
+      usePlayer.setState({ show: { ruler: msg.ruler, pointer: msg.pointer } });
+      if (!msg.pointer) pointerTrail.clear();
       break;
   }
 }

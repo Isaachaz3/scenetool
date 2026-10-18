@@ -1,9 +1,10 @@
 import type Konva from 'konva';
 import { memo } from 'react';
-import { Circle, Group, Image as KImage, Label, Tag, Text } from 'react-konva';
+import { Circle, Ellipse, Group, Image as KImage, Label, Line, Rect, Tag, Text } from 'react-konva';
 import { CELL, FONT_FAMILIES, TEXT_BACKGROUND } from '../core/constants';
-import { imageScale } from '../core/geometry';
-import type { DiscToken, ImageItem, Item, TextItem, Vec2 } from '../core/types';
+import { imageBounds, imageScale } from '../core/geometry';
+import type { DiscToken, DrawingItem, ImageItem, Item, TextItem, Vec2 } from '../core/types';
+import { textWidth } from './textMeasure';
 
 export interface ImageSource {
   image?: CanvasImageSource;
@@ -18,6 +19,8 @@ interface CommonProps {
   nodeRef?: (node: Konva.Node | null) => void;
   /** Draw a placeholder where an image is still loading (GM only). */
   placeholder?: boolean;
+  /** Click tolerance of drawings in world units (GM: a fixed number of screen pixels). */
+  hitWidth?: number;
   hiddenFor?: boolean; // text being edited in place
 }
 
@@ -33,28 +36,64 @@ function ImageNode({
   if (!source) return null;
   const s = imageScale(item.grid, item.scale);
   const p = position ?? item.position;
+  const bounds = item.label ? imageBounds({ ...item, position: p }, source.width, source.height) : null;
   // One node whether or not the image is decoded yet, so refs and the transformer stay valid;
   // while loading the GM sees a grey footprint.
   return (
-    <KImage
-      ref={nodeRef}
-      id={item.id}
-      name="item"
-      image={source.image}
-      fill={!source.image && placeholder ? 'rgba(58, 59, 74, 0.6)' : undefined}
-      x={p.x}
-      y={p.y}
-      width={source.width}
-      height={source.height}
-      offsetX={item.grid.offset.x}
-      offsetY={item.grid.offset.y}
-      scaleX={s.x}
-      scaleY={s.y}
-      rotation={item.rotation}
-      opacity={opacity}
-      listening={listening}
-      perfectDrawEnabled={false}
-    />
+    <>
+      <KImage
+        ref={nodeRef}
+        id={item.id}
+        name="item"
+        image={source.image}
+        fill={!source.image && placeholder ? 'rgba(58, 59, 74, 0.6)' : undefined}
+        x={p.x}
+        y={p.y}
+        width={source.width}
+        height={source.height}
+        offsetX={item.grid.offset.x}
+        offsetY={item.grid.offset.y}
+        scaleX={s.x}
+        scaleY={s.y}
+        rotation={item.rotation}
+        opacity={opacity}
+        listening={listening}
+        perfectDrawEnabled={false}
+      />
+      {bounds && item.label ? (
+        <TokenLabel
+          text={item.label}
+          x={bounds.x + bounds.width / 2}
+          y={bounds.y + bounds.height}
+          opacity={opacity}
+        />
+      ) : null}
+    </>
+  );
+}
+
+const LABEL_FONT = 26;
+
+/** Name plate under a token, in world units so it scales with the map. */
+function TokenLabel({ text, x, y, opacity }: { text: string; x: number; y: number; opacity?: number }) {
+  const w = textWidth(text, LABEL_FONT) + 16;
+  const h = LABEL_FONT + 10;
+  return (
+    <Group x={x - w / 2} y={y + 4} opacity={opacity} listening={false}>
+      <Rect width={w} height={h} fill="rgba(20,20,28,0.85)" cornerRadius={8} perfectDrawEnabled={false} />
+      <Text
+        width={w}
+        height={h}
+        text={text}
+        align="center"
+        verticalAlign="middle"
+        fontSize={LABEL_FONT}
+        fontStyle="bold"
+        fontFamily={FONT_FAMILIES.sans}
+        fill="#ffffff"
+        perfectDrawEnabled={false}
+      />
+    </Group>
   );
 }
 
@@ -72,40 +111,104 @@ function DiscNode({ item, position, opacity, listening, nodeRef }: CommonProps &
   const inner = r * 0.9;
   const fontSize = item.text.length <= 2 ? inner * 1.0 : inner * (2.2 / item.text.length);
   return (
-    <Group
-      ref={nodeRef}
-      id={item.id}
-      name="item"
-      x={p.x}
-      y={p.y}
-      rotation={item.rotation}
-      opacity={opacity}
-      listening={listening}
-    >
-      <Circle
-        radius={inner}
-        fill={item.color}
-        stroke="rgba(0,0,0,0.55)"
-        strokeWidth={inner * 0.08}
-        perfectDrawEnabled={false}
-      />
-      <Text
-        text={item.text}
-        width={inner * 2}
-        height={inner * 2}
-        offsetX={inner}
-        offsetY={inner}
-        align="center"
-        verticalAlign="middle"
-        fontStyle="bold"
-        fontFamily={FONT_FAMILIES.sans}
-        fontSize={fontSize}
-        fill={contrastText(item.color)}
-        listening={false}
-        perfectDrawEnabled={false}
-      />
-    </Group>
+    <>
+      <Group
+        ref={nodeRef}
+        id={item.id}
+        name="item"
+        x={p.x}
+        y={p.y}
+        rotation={item.rotation}
+        opacity={opacity}
+        listening={listening}
+      >
+        <Circle
+          radius={inner}
+          fill={item.color}
+          stroke="rgba(0,0,0,0.55)"
+          strokeWidth={inner * 0.08}
+          perfectDrawEnabled={false}
+        />
+        <Text
+          text={item.text}
+          width={inner * 2}
+          height={inner * 2}
+          offsetX={inner}
+          offsetY={inner}
+          align="center"
+          verticalAlign="middle"
+          fontStyle="bold"
+          fontFamily={FONT_FAMILIES.sans}
+          fontSize={fontSize}
+          fill={contrastText(item.color)}
+          listening={false}
+          perfectDrawEnabled={false}
+        />
+      </Group>
+      {item.label ? <TokenLabel text={item.label} x={p.x} y={p.y + inner} opacity={opacity} /> : null}
+    </>
   );
+}
+
+/** Freehand path, line, rectangle, ellipse or polygon; rect and ellipse store [x, y, w, h]. */
+function DrawingNode({
+  item,
+  position,
+  opacity,
+  listening,
+  nodeRef,
+  hitWidth,
+}: CommonProps & { item: DrawingItem }) {
+  const p = position ?? item.position;
+  const pts = item.points;
+  const common = {
+    ref: nodeRef,
+    id: item.id,
+    name: 'item',
+    x: p.x,
+    y: p.y,
+    rotation: item.rotation,
+    scaleX: item.scale.x,
+    scaleY: item.scale.y,
+    opacity: (opacity ?? 1) * item.opacity,
+    listening,
+    stroke: item.stroke,
+    strokeWidth: item.strokeWidth,
+    hitStrokeWidth: Math.max(item.strokeWidth, hitWidth ?? 24),
+    lineCap: 'round' as const,
+    lineJoin: 'round' as const,
+    perfectDrawEnabled: false,
+  };
+  switch (item.shape) {
+    case 'rect':
+      return (
+        <Rect
+          {...common}
+          offsetX={-pts[0]}
+          offsetY={-pts[1]}
+          width={pts[2]}
+          height={pts[3]}
+          fill={item.fill}
+        />
+      );
+    case 'ellipse':
+      return (
+        <Ellipse
+          {...common}
+          offsetX={-(pts[0] + pts[2] / 2)}
+          offsetY={-(pts[1] + pts[3] / 2)}
+          radiusX={Math.abs(pts[2] / 2)}
+          radiusY={Math.abs(pts[3] / 2)}
+          fill={item.fill}
+        />
+      );
+    case 'polygon':
+      return <Line {...common} points={pts} closed fill={item.fill} />;
+    case 'path':
+      return <Line {...common} points={pts} tension={0.4} />;
+    default:
+      return <Line {...common} points={pts} />;
+  }
 }
 
 function TextNode({
@@ -171,7 +274,9 @@ export const ItemShape = memo(function ItemShape(props: ItemShapeProps) {
       return <DiscNode {...props} item={item} />;
     case 'text':
       return <TextNode {...props} item={item} />;
+    case 'drawing':
+      return <DrawingNode {...props} item={item} />;
     default:
-      return null; // drawings, fog and rulers arrive in stage 2
+      return null; // fog is drawn by its own layer; permanent rulers come in stage 3
   }
 });

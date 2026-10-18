@@ -32,10 +32,17 @@ export interface UiState {
   dialog: Dialog | null;
   confirm: { text: string; resolve: (ok: boolean) => void } | null;
   prompt: { text: string; value: string; resolve: (value: string | null) => void } | null;
+  choice: {
+    text: string;
+    options: { value: string; label: string }[];
+    resolve: (value: string | null) => void;
+  } | null;
   toasts: Toast[];
   follow: boolean;
   player: PlayerStatus;
   spaceDown: boolean;
+  /** "Глазами игроков": opaque fog, hidden items left out. */
+  preview: boolean;
 }
 
 const PREFS_KEY = 'vtt-lite:ui';
@@ -73,10 +80,12 @@ export const useUi = create<UiState>(() => ({
   dialog: null,
   confirm: null,
   prompt: null,
+  choice: null,
   toasts: [],
   follow: false,
   player: { links: 0, presentationAvailable: false, presenting: false },
   spaceDown: false,
+  preview: false,
 }));
 
 export const getUi = useUi.getState;
@@ -91,6 +100,14 @@ export function confirmDialog(text: string): Promise<boolean> {
 
 export function promptDialog(text: string, value = ''): Promise<string | null> {
   return new Promise((resolve) => useUi.setState({ prompt: { text, value, resolve } }));
+}
+
+/** Asks to pick one of several answers; null when dismissed. */
+export function choiceDialog(
+  text: string,
+  options: { value: string; label: string }[],
+): Promise<string | null> {
+  return new Promise((resolve) => useUi.setState({ choice: { text, options, resolve } }));
 }
 
 let toastId = 0;

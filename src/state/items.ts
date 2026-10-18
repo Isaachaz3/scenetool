@@ -28,7 +28,7 @@ export function snapFor(item: Item, p: Vec2, scene: Scene | null = activeScene()
   return snapItemPosition(item, p, imageSizeOf(item));
 }
 
-function nextZ(scene: Scene, layer: Layer): number {
+export function nextZ(scene: Scene, layer: Layer): number {
   let z = -1;
   for (const it of Object.values(scene.items)) if (it.layer === layer && it.z > z) z = it.z;
   return z + 1;
@@ -292,5 +292,15 @@ export function setLayer(ids: Id[], layer: Layer): void {
 export function setSelection(ids: Id[]): void {
   setGm((d) => {
     d.selection = ids;
+  });
+}
+
+/** Name plate under image tokens and discs; an empty text removes it. */
+export function setLabel(ids: Id[], label: string): void {
+  const text = label.trim();
+  updateItems(ids, (it) => {
+    if (it.kind !== 'image' && it.kind !== 'disc') return;
+    if (text) it.label = text;
+    else delete it.label;
   });
 }

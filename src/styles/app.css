@@ -1024,3 +1024,95 @@ kbd {
 .toast.error {
   border-color: var(--danger);
 }
+
+/* --- stage 2: tool options and context menu ------------------------------------------------ */
+
+.mode-buttons {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.hint.inline {
+  margin: 0;
+}
+
+.context-menu {
+  position: absolute;
+  z-index: 20;
+  min-width: 250px;
+}
+
+.context-menu kbd {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 10px;
+  color: var(--muted);
+}
+
+.menu-sizes {
+  display: flex;
+  gap: 2px;
+}
+
+.menu .menu-sizes button {
+  padding: 4px 8px;
+  min-width: 30px;
+  justify-content: center;
+  background: var(--panel-2);
+}
+
+.menu .menu-sizes button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.storage {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 24px;
+}
+
+.storage-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+}
+
+.storage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.storage-table th,
+.storage-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.storage-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.storage-table .num-col {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.storage-table tr.unused td {
+  color: var(--warn);
+}

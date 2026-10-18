@@ -7,20 +7,19 @@ import {
   toggleVisible,
 } from '../state/items';
 import { resetView } from '../state/scenes';
-import { getGm, redo, undo, useGm, type ToolId } from '../state/store';
+import { getGm, redo, undo, useGm, type MeasureMode, type ToolId } from '../state/store';
 import { finishTextEdit } from '../state/text';
 import { getUi, useUi, writePrefs } from '../state/ui';
 import { cancelGesture } from './canvas/input';
-import { lastPointer } from './canvas/canvasState';
+import { lastPointer, useCanvasUi } from './canvas/canvasState';
+import { cancelPolygon, finishPolygon, polygonActive, popPolygonPoint } from './canvas/tools';
 import { hub } from './playerHub';
 
-/** Tools available in stage 1; the rest of the toolbar comes with stage 2. */
-export const ENABLED_TOOLS: ToolId[] = ['move', 'select', 'text'];
-
-export function setTool(tool: ToolId): void {
-  if (!ENABLED_TOOLS.includes(tool)) return;
+export function setTool(tool: ToolId, measureMode?: MeasureMode): void {
   finishTextEdit();
-  useGm.setState({ tool });
+  cancelPolygon();
+  useCanvasUi.setState({ draft: null, contextMenu: null });
+  useGm.setState(measureMode ? { tool, measureMode } : { tool });
   writePrefs({ tool });
 }
 
@@ -31,7 +30,14 @@ function isTyping(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
 }
 
-const TOOL_KEYS: Record<string, ToolId> = { h: 'move', s: 'select', t: 'text' };
+const TOOL_KEYS: Record<string, ToolId> = {
+  h: 'move',
+  s: 'select',
+  f: 'fog',
+  d: 'draw',
+  p: 'pointer',
+  t: 'text',
+};
 
 export function installHotkeys(): () => void {
   const onKeyDown = (e: KeyboardEvent) => {
@@ -39,7 +45,7 @@ export function installHotkeys(): () => void {
     const key = e.key.toLowerCase();
     const code = e.code;
     const typing = isTyping(e.target);
-    const blocked = !!getUi().dialog || !!getUi().confirm || !!getUi().prompt;
+    const blocked = !!getUi().dialog || !!getUi().confirm || !!getUi().prompt || !!getUi().choice;
 
     if (e.key === ' ' && !typing && !blocked) {
       e.preventDefault();
@@ -64,12 +70,19 @@ export function installHotkeys(): () => void {
     if (e.altKey) return;
 
     if (e.key === 'Escape') {
-      if (!cancelGesture()) useGm.setState({ selection: [] });
+      if (useCanvasUi.getState().contextMenu) useCanvasUi.setState({ contextMenu: null });
+      else if (!cancelGesture()) useGm.setState({ selection: [] });
+      return;
+    }
+    if (e.key === 'Enter' && polygonActive()) {
+      e.preventDefault();
+      finishPolygon();
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      deleteItems(sel);
+      if (e.key === 'Backspace' && polygonActive()) popPolygonPoint();
+      else deleteItems(sel);
       return;
     }
     if (e.key === 'Home') {
@@ -82,8 +95,11 @@ export function installHotkeys(): () => void {
       if (letter === 'h') toggleVisible(sel);
       else if (letter === 'l') toggleLock(sel);
       else if (letter === 'y') hub.setFollow(!getUi().follow);
+      else if (letter === 'p') useUi.setState({ preview: !getUi().preview });
       return;
     }
+    if (letter === 'r') return setTool('measure', 'ruler');
+    if (letter === 'm') return setTool('measure', 'movement');
     if (letter === 'y') {
       hub.syncView();
       return;

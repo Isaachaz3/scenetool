@@ -1,18 +1,33 @@
 import { enablePatches, produce, produceWithPatches, type Draft } from 'immer';
 import { create } from 'zustand';
-import { DEFAULT_SETTINGS, DEFAULT_TEXT_STYLE } from '../core/constants';
+import { DEFAULT_DRAW_STYLE, DEFAULT_SETTINGS, DEFAULT_TEXT_STYLE } from '../core/constants';
 import { History } from '../core/history';
-import type { AppSettings, Asset, Collection, Id, ImageGrid, Scene, TextStyle, Vec2 } from '../core/types';
+import type {
+  AppSettings,
+  Asset,
+  Collection,
+  DrawStyle,
+  Id,
+  ImageGrid,
+  Scene,
+  TextStyle,
+  Vec2,
+} from '../core/types';
 
 enablePatches();
 
 export type ToolId = 'move' | 'select' | 'fog' | 'draw' | 'measure' | 'pointer' | 'text';
+export type MeasureMode = 'ruler' | 'movement';
+export type DrawMode = 'brush' | 'line' | 'rect' | 'ellipse' | 'polygon' | 'eraser';
+export type FogMode = 'rect' | 'polygon' | 'ellipse' | 'brush';
 
 export interface DragState {
   /** Live positions of the dragged items; the scene changes only on drop. */
   positions: Record<Id, Vec2>;
   /** Alt-drag: the originals stay in place as copies. */
   copy: boolean;
+  /** Movement mode: a translucent ghost stays at the start. */
+  ghost?: boolean;
 }
 
 export interface AlignState {
@@ -44,6 +59,10 @@ export interface GmState {
   align: AlignState | null;
   textEdit: TextEditState | null;
   textStyle: TextStyle;
+  measureMode: MeasureMode;
+  drawMode: DrawMode;
+  drawStyle: DrawStyle;
+  fogMode: FogMode;
   saveState: SaveState;
   canUndo: boolean;
   canRedo: boolean;
@@ -63,6 +82,10 @@ export const useGm = create<GmState>(() => ({
   align: null,
   textEdit: null,
   textStyle: DEFAULT_TEXT_STYLE,
+  measureMode: 'ruler',
+  drawMode: 'brush',
+  drawStyle: DEFAULT_DRAW_STYLE,
+  fogMode: 'rect',
   saveState: 'saved',
   canUndo: false,
   canRedo: false,

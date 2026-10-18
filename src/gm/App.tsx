@@ -3,6 +3,7 @@ import { t } from '../i18n/ru';
 import { useGm } from '../state/store';
 import { useUi } from '../state/ui';
 import { GmCanvas } from './canvas/GmCanvas';
+import { ContextMenu } from './canvas/ContextMenu';
 import { SelectionPlaque } from './canvas/SelectionPlaque';
 import { TextEditor } from './canvas/TextEditor';
 import { AlignPanel } from './ui/AlignPanel';
@@ -15,13 +16,14 @@ import {
   HotkeysDialog,
   NewSceneDialog,
   SettingsDialog,
-  StorageDialog,
   Toasts,
 } from './ui/dialogs/SmallDialogs';
+import { StorageDialog } from './ui/dialogs/StorageDialog';
 import { Dock } from './ui/Dock';
 import { GridViewPanel } from './ui/GridViewPanel';
 import { MainMenu } from './ui/MainMenu';
-import { Toolbar, ToolOptions } from './ui/Toolbar';
+import { Toolbar } from './ui/Toolbar';
+import { ToolOptions } from './ui/ToolOptions';
 
 function DialogHost() {
   const dialog = useUi((s) => s.dialog);
@@ -73,6 +75,7 @@ export function App() {
       <EmptyHint />
       <TextEditor />
       <SelectionPlaque />
+      <ContextMenu />
       <ToolOptions />
       <AlignPanel />
       <Toolbar />

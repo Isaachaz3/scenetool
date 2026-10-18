@@ -8,7 +8,7 @@ import { addScene, newScene } from './scenes';
 import { useGm, type ToolId } from './store';
 import { readPrefs } from './ui';
 
-const BOOT_TOOLS: ToolId[] = ['move', 'select', 'text'];
+const BOOT_TOOLS: ToolId[] = ['move', 'select', 'fog', 'draw', 'measure', 'pointer', 'text'];
 
 /** Loads the library and scenes from IndexedDB and opens the last scene. */
 export async function boot(): Promise<void> {

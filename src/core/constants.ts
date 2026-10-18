@@ -1,4 +1,4 @@
-import type { AppSettings, AssetType, FogSettings, GridSettings, Layer, TextStyle } from './types';
+import type { AppSettings, AssetType, DrawStyle, FogSettings, GridSettings, Layer, TextStyle } from './types';
 
 /** One grid cell is always 150 world units. */
 export const CELL = 150;
@@ -70,6 +70,27 @@ export const DEFAULT_TEXT_STYLE: TextStyle = {
   bold: false,
   align: 'left',
 };
+
+export const DEFAULT_DRAW_STYLE: DrawStyle = {
+  stroke: '#ef4444',
+  strokeWidth: 8,
+  fill: false,
+  fillColor: '#ef4444',
+  opacity: 1,
+};
+
+export const DRAW_COLORS = [
+  '#ef4444',
+  '#f97316',
+  '#facc15',
+  '#22c55e',
+  '#3b82f6',
+  '#a78bfa',
+  '#ffffff',
+  '#111111',
+];
+
+export const ACCENT = '#a78bfa';
 
 export const FONT_FAMILIES: Record<TextStyle['fontFamily'], string> = {
   sans: 'system-ui, "Segoe UI", Roboto, Arial, sans-serif',
