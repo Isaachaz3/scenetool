@@ -22,10 +22,17 @@ import { deleteAsset, selectCollection } from '../state/assets';
 import { flushScenes, markSaved } from '../state/persistence';
 import { deleteScene } from '../state/scenes';
 import { dropHistory, getGm, refreshHistoryFlags, setGm, useGm } from '../state/store';
-import { CLOUD_BUCKET, DOCS_TABLE, SUPABASE_KEY, SUPABASE_URL } from './config';
+import { CLOUD_BUCKET, DOCS_TABLE, SUPABASE_KEY, SUPABASE_URL, USAGE_RPC } from './config';
 import { clearTombstones, deletionListeners, readTombstones, remoteFiles } from './remote';
 
 export type CloudStatus = 'loading' | 'signed-out' | 'idle' | 'syncing' | 'error';
+
+/** Space taken in the Supabase project, in bytes. */
+export interface CloudUsage {
+  database: number; // the whole database, Supabase's own tables included
+  files: number; // this account's images and thumbnails
+  count: number;
+}
 
 interface CloudState {
   status: CloudStatus;
@@ -33,6 +40,8 @@ interface CloudState {
   lastSyncAt: number | null;
   progress: string | null;
   error: string | null;
+  usage: CloudUsage | null;
+  usageMissing: boolean; // the project has no vtt_usage() yet: schema.sql is older
 }
 
 export const useCloud = create<CloudState>(() => ({
@@ -41,6 +50,8 @@ export const useCloud = create<CloudState>(() => ({
   lastSyncAt: null,
   progress: null,
   error: null,
+  usage: null,
+  usageMissing: false,
 }));
 
 /** Per-user sync bookkeeping kept in IndexedDB. */
@@ -105,7 +116,7 @@ function applySession(session: Session | null) {
   if (!uid || !session) {
     remoteFiles.file = null;
     remoteFiles.thumb = null;
-    useCloud.setState({ status: 'signed-out', email: null, progress: null });
+    useCloud.setState({ status: 'signed-out', email: null, progress: null, usage: null });
     return;
   }
   remoteFiles.file = (asset) => download(filePath(uid, asset.hash));
@@ -206,6 +217,7 @@ export async function syncNow(): Promise<void> {
     await pushChanges(client, uid, meta);
     await saveMeta(uid, meta);
     useCloud.setState({ status: 'idle', lastSyncAt: Date.now(), progress: null });
+    void refreshUsage();
   } catch (err) {
     console.warn('Cloud sync failed', err);
     useCloud.setState({ status: 'error', error: describe(err), progress: null });
@@ -216,6 +228,23 @@ export async function syncNow(): Promise<void> {
       schedule(1000);
     }
   }
+}
+
+/** Reads how much space the project takes; errors only hide the meters. */
+export async function refreshUsage(): Promise<void> {
+  if (!client || !userId) return;
+  const { data, error } = await client.rpc(USAGE_RPC);
+  if (error) {
+    const missing = error.code === 'PGRST202' || error.message.includes(USAGE_RPC);
+    if (!missing) console.warn('Cloud usage failed', error);
+    useCloud.setState({ usageMissing: missing });
+    return;
+  }
+  const u = data as Partial<CloudUsage> | null;
+  useCloud.setState({
+    usageMissing: false,
+    usage: { database: Number(u?.database ?? 0), files: Number(u?.files ?? 0), count: Number(u?.count ?? 0) },
+  });
 }
 
 async function upsert(c: SupabaseClient, rows: object[]) {

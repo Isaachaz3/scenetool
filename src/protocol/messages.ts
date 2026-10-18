@@ -1,5 +1,5 @@
 import type { MeasureView } from '../core/types';
-import type { PlayerScene, SceneDiff } from './projection';
+import type { AssetRef, PlayerScene, SceneDiff } from './projection';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -25,7 +25,8 @@ export type GmMessage =
   | ({ type: 'view:set' } & ViewMessage & V)
   | ({ type: 'measure'; measure: MeasureView | null } & V)
   | ({ type: 'pointer'; x: number; y: number; active: boolean } & V) // active: false = released
-  | ({ type: 'settings'; ruler: boolean; pointer: boolean } & V);
+  | ({ type: 'settings'; ruler: boolean; pointer: boolean } & V)
+  | ({ type: 'backdrop'; backdrop: AssetRef | null } & V); // picture over the scene, null hides it
 
 export type GmMessageType = GmMessage['type'];
 export type PlayerMessageType = PlayerMessage['type'];
@@ -46,6 +47,7 @@ const GM_TYPES: ReadonlySet<string> = new Set<GmMessageType>([
   'measure',
   'pointer',
   'settings',
+  'backdrop',
 ]);
 const PLAYER_TYPES: ReadonlySet<string> = new Set<PlayerMessageType>(['hello', 'screen', 'need-assets']);
 

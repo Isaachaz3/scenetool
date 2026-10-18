@@ -49,3 +49,19 @@ create policy "vtt files: owner only" on storage.objects
   for all to authenticated
   using (bucket_id = 'vtt-files' and (storage.foldername(name))[1] = (select auth.uid())::text)
   with check (bucket_id = 'vtt-files' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- How much of the plan this project uses (database size, own files): shown in the app.
+create or replace function public.vtt_usage() returns json
+language sql stable security definer set search_path = '' as $$
+  select json_build_object(
+    'database', pg_catalog.pg_database_size(pg_catalog.current_database()),
+    'files', coalesce(sum((o.metadata ->> 'size')::bigint), 0),
+    'count', count(o.id)
+  )
+  from storage.objects o
+  where o.bucket_id = 'vtt-files'
+    and (storage.foldername(o.name))[1] = (select auth.uid())::text;
+$$;
+
+revoke execute on function public.vtt_usage() from public, anon;
+grant execute on function public.vtt_usage() to authenticated;

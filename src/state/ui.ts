@@ -44,6 +44,8 @@ export interface UiState {
   spaceDown: boolean;
   /** "Глазами игроков": opaque fog, hidden items left out. */
   preview: boolean;
+  /** The shown backdrop is collapsed to a corner for the GM; players still see it. */
+  backdropMinimized: boolean;
 }
 
 const PREFS_KEY = 'vtt-lite:ui';
@@ -87,6 +89,7 @@ export const useUi = create<UiState>(() => ({
   player: { links: 0, presentationAvailable: false, presenting: false },
   spaceDown: false,
   preview: false,
+  backdropMinimized: false,
 }));
 
 export const getUi = useUi.getState;

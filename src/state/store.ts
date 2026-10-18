@@ -53,6 +53,7 @@ export interface GmState {
   assets: Record<Id, Asset>;
   scenes: Record<Id, Scene>;
   activeSceneId: Id | null;
+  backdropId: Id | null; // backdrop asset shown over the scene on both screens
   selection: Id[];
   tool: ToolId;
   drag: DragState | null;
@@ -76,6 +77,7 @@ export const useGm = create<GmState>(() => ({
   assets: {},
   scenes: {},
   activeSceneId: null,
+  backdropId: null,
   selection: [],
   tool: 'move',
   drag: null,

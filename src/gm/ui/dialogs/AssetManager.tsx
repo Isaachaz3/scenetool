@@ -27,6 +27,7 @@ function AssetEditor({ asset, onClose }: { asset: Asset; onClose: () => void }) 
   const image = useBitmap(gmImages, type === 'map' ? asset.id : undefined);
   const usage = assetUsage(asset.id);
   const isMap = type === 'map';
+  const isBackdrop = type === 'backdrop';
 
   useEffect(() => {
     if (!isMap) return;
@@ -79,21 +80,28 @@ function AssetEditor({ asset, onClose }: { asset: Asset; onClose: () => void }) 
       <p className="muted">
         {t.manager.pixels(asset.width, asset.height)} · {t.manager.usedIn(usage)}
       </p>
-      <h3>{t.manager.defaults}</h3>
-      <Field label={t.importer.visible}>
-        <Toggle checked={defaults.visible} onChange={(visible) => setDefaults({ ...defaults, visible })} />
-      </Field>
-      <Field label={t.importer.locked}>
-        <Toggle checked={defaults.locked} onChange={(locked) => setDefaults({ ...defaults, locked })} />
-      </Field>
-      <Field label={t.manager.rotation}>
-        <Segmented
-          value={String(defaults.rotation)}
-          options={['0', '90', '180', '270'].map((v) => ({ value: v, label: `${v}°` }))}
-          onChange={(v) => setDefaults({ ...defaults, rotation: Number(v) })}
-        />
-      </Field>
-      {isMap ? (
+      {isBackdrop ? null : (
+        <>
+          <h3>{t.manager.defaults}</h3>
+          <Field label={t.importer.visible}>
+            <Toggle
+              checked={defaults.visible}
+              onChange={(visible) => setDefaults({ ...defaults, visible })}
+            />
+          </Field>
+          <Field label={t.importer.locked}>
+            <Toggle checked={defaults.locked} onChange={(locked) => setDefaults({ ...defaults, locked })} />
+          </Field>
+          <Field label={t.manager.rotation}>
+            <Segmented
+              value={String(defaults.rotation)}
+              options={['0', '90', '180', '270'].map((v) => ({ value: v, label: `${v}°` }))}
+              onChange={(v) => setDefaults({ ...defaults, rotation: Number(v) })}
+            />
+          </Field>
+        </>
+      )}
+      {isBackdrop ? null : isMap ? (
         <>
           <h3>{t.align.title}</h3>
           <FitPreview image={image} width={asset.width} height={asset.height} grid={grid} />

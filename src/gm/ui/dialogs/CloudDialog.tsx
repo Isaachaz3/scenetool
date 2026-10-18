@@ -1,11 +1,48 @@
 import { LogIn, LogOut, RefreshCw, UserPlus } from 'lucide-react';
-import { useState } from 'react';
-import { signIn, signOut, signUp, syncNow, useCloud } from '../../../cloud/sync';
-import { t } from '../../../i18n/ru';
+import { useEffect, useState } from 'react';
+import { FREE_PLAN } from '../../../cloud/config';
+import { refreshUsage, signIn, signOut, signUp, syncNow, useCloud } from '../../../cloud/sync';
+import { formatBytes, t } from '../../../i18n/ru';
 import { openDialog } from '../../../state/ui';
 import { Field, Modal } from '../common';
 
 const close = () => openDialog(null);
+
+function Meter({ label, used, limit }: { label: string; used: number; limit: number }) {
+  const k = Math.min(1, used / limit);
+  return (
+    <div className="usage">
+      <span>{label}</span>
+      <span className={'meter' + (k > 0.8 ? ' high' : '')}>
+        <span style={{ width: `${Math.max(k * 100, used > 0 ? 1 : 0)}%` }} />
+      </span>
+    </div>
+  );
+}
+
+function Usage() {
+  const usage = useCloud((s) => s.usage);
+  const missing = useCloud((s) => s.usageMissing);
+  useEffect(() => void refreshUsage(), []);
+  if (missing) return <p className="muted">{t.cloud.usageMissing}</p>;
+  if (!usage) return null;
+  return (
+    <div className="usage-block">
+      <h4>{t.cloud.usageTitle}</h4>
+      <Meter
+        label={t.cloud.usageFiles(formatBytes(usage.files), formatBytes(FREE_PLAN.files), usage.count)}
+        used={usage.files}
+        limit={FREE_PLAN.files}
+      />
+      <Meter
+        label={t.cloud.usageDatabase(formatBytes(usage.database), formatBytes(FREE_PLAN.database))}
+        used={usage.database}
+        limit={FREE_PLAN.database}
+      />
+      <p className="muted usage-note">{t.cloud.usageNote}</p>
+    </div>
+  );
+}
 
 /** Sign in to the Supabase project; once signed in the library syncs on its own. */
 export function CloudDialog() {
@@ -53,6 +90,7 @@ export function CloudDialog() {
           {cloud.lastSyncAt ? (
             <p className="muted">{t.cloud.lastSync(new Date(cloud.lastSyncAt).toLocaleString('ru-RU'))}</p>
           ) : null}
+          <Usage />
           <div className="row">
             <button
               type="button"

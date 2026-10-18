@@ -42,6 +42,7 @@ export const ru = {
     character: 'Персонажи',
     attachment: 'Вложения',
     note: 'Заметки',
+    backdrop: 'Фоны',
   } satisfies Record<AssetType, string>,
 
   assetTypeSingle: {
@@ -51,7 +52,17 @@ export const ru = {
     character: 'Персонаж',
     attachment: 'Вложение',
     note: 'Заметка',
+    backdrop: 'Фоновое изображение',
   } satisfies Record<AssetType, string>,
+
+  backdrop: {
+    tileHint: 'Нажмите, чтобы показать поверх сцены, ещё раз — чтобы убрать',
+    shown: (name: string) => `Поверх сцены: «${name}»`,
+    hide: 'Убрать',
+    minimize: 'Свернуть у себя',
+    expand: 'Развернуть',
+    minimizedHint: 'Игроки видят фон, а вы — сцену',
+  },
 
   layers: {
     map: 'Карта',
@@ -343,7 +354,7 @@ export const ru = {
       ['Отключить привязку на время', 'зажать Ctrl'],
       ['Добавить к выделению', 'Shift'],
       ['Копия при перетаскивании', 'Alt'],
-      ['Отмена действия', 'Esc'],
+      ['Отмена действия, убрать фон', 'Esc'],
       ['Завершить многоугольник / убрать угол', 'Enter / Backspace'],
       ['Предпросмотр глазами игроков', 'Shift+P'],
       ['Сбросить вид', 'Home'],
@@ -405,6 +416,14 @@ export const ru = {
     checkEmail: (email: string) =>
       `Письмо отправлено на ${email}. Откройте ссылку из него на этом компьютере — и вы войдёте.`,
     lastSync: (time: string) => `Последняя синхронизация: ${time}`,
+    usageTitle: 'Занято в облаке (бесплатный тариф)',
+    usageFiles: (used: string, limit: string, n: number) =>
+      `Картинки: ${used} из ${limit} · ${n} ${plural(n, 'файл', 'файла', 'файлов')}`,
+    usageDatabase: (used: string, limit: string) => `База данных: ${used} из ${limit}`,
+    usageNote: 'В базу входят служебные таблицы Supabase: даже пустой проект занимает несколько десятков МБ.',
+    usageMissing:
+      'Чтобы видеть занятое место, запустите обновлённый supabase/schema.sql ещё раз в SQL Editor.',
+    usageShort: (files: string, db: string) => `Картинки: ${files} · база: ${db}`,
     uploading: (i: number, n: number) => `Загружаю картинки в облако: ${i} из ${n}`,
     pushing: 'Отправляю изменения…',
     pulling: 'Получаю изменения…',

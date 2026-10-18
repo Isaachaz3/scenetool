@@ -11,7 +11,7 @@ import { GridShape } from '../render/GridShape';
 import { ItemShape } from '../render/ItemShape';
 import { MeasureShape } from '../render/MeasureShape';
 import { PointerTrailShape } from '../render/PointerTrail';
-import { playerImages, pointerTrail, sendScreen, usePlayer } from './session';
+import { fileUrl, playerImages, pointerTrail, sendScreen, usePlayer } from './session';
 
 function useWindowSize() {
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -91,6 +91,26 @@ function SceneLayers({ scene, zoom }: { scene: PlayerScene; zoom: number }) {
   );
 }
 
+/** The GM's backdrop over the scene: fades in once its file is here, fades out when hidden. */
+function Backdrop() {
+  const ref = usePlayer((s) => s.backdrop);
+  usePlayer((s) => s.filesTick);
+  const url = ref ? fileUrl(ref.hash) : undefined;
+  const [last, setLast] = useState(url);
+  if (url && url !== last) setLast(url); // keeps the picture while it fades out
+  if (!last) return null;
+  return (
+    <div
+      className={'player-backdrop' + (url ? ' on' : '')}
+      onTransitionEnd={() => {
+        if (!url) setLast(undefined);
+      }}
+    >
+      <img src={last} alt="" />
+    </div>
+  );
+}
+
 function FullscreenButton() {
   const [isFull, setFull] = useState(!!document.fullscreenElement);
   const [idle, setIdle] = useState(false);
@@ -141,6 +161,7 @@ export function PlayerApp() {
       >
         {scene ? <SceneLayers scene={scene} zoom={view.zoom} /> : null}
       </Stage>
+      <Backdrop />
       {!heard ? (
         <div className="player-message">{mode === 'none' ? t.player.noOpener : t.player.waiting}</div>
       ) : null}

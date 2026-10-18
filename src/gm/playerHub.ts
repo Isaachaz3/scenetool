@@ -6,7 +6,8 @@ import { chunkCount, chunks } from '../protocol/binary';
 import type { PlayerLink } from '../protocol/link';
 import { PresentationLink, WindowLink } from '../protocol/links';
 import { gmMessage, parsePlayerMessage, type PlayerMessage, type ViewMessage } from '../protocol/messages';
-import { diffProjection, projectScene, type PlayerScene } from '../protocol/projection';
+import { assetRef, diffProjection, projectScene, type PlayerScene } from '../protocol/projection';
+import { shownBackdrop } from '../state/backdrop';
 import { activeScene, changeScene, getGm, useGm, type DragState } from '../state/store';
 import { getUi, toast, useUi } from '../state/ui';
 
@@ -24,6 +25,7 @@ class Session {
   view: Viewport | null = null;
   ref: Size | undefined;
   measure: MeasureView | null = null;
+  backdrop: string | null | undefined; // hash of the backdrop last sent; undefined: nothing sent yet
 
   constructor(readonly link: PlayerLink) {}
 }
@@ -68,7 +70,8 @@ export class PlayerHub {
         s.scenes !== prev.scenes ||
         s.activeSceneId !== prev.activeSceneId ||
         s.assets !== prev.assets ||
-        s.drag !== prev.drag
+        s.drag !== prev.drag ||
+        s.backdropId !== prev.backdropId
       ) {
         if (!s.drag) this.dragCache.clear();
         if (getUi().follow && s.activeSceneId === prev.activeSceneId) this.followGm(prev);
@@ -134,8 +137,10 @@ export class PlayerHub {
         session.has = new Set(msg.cached);
         session.queue = [];
         session.measure = null;
+        session.backdrop = undefined;
         this.sendSnapshot(session);
         this.sendSettings(session);
+        this.sendBackdrop(session);
         break;
       case 'screen': {
         session.screen = { width: msg.width, height: msg.height };
@@ -228,7 +233,17 @@ export class PlayerHub {
         session.measure = measure;
         session.link.send(gmMessage({ type: 'measure', measure }));
       }
+      this.sendBackdrop(session);
     }
+  }
+
+  /** The backdrop over the scene, when it changed; its file follows on request like any image. */
+  private sendBackdrop(session: Session) {
+    const asset = shownBackdrop();
+    const hash = asset?.hash ?? null;
+    if (session.backdrop === hash) return;
+    session.backdrop = hash;
+    session.link.send(gmMessage({ type: 'backdrop', backdrop: asset ? assetRef(asset) : null }));
   }
 
   private sendSettings(session: Session) {

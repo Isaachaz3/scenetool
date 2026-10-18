@@ -14,6 +14,7 @@ import type {
   TextStyle,
   Vec2,
 } from '../core/types';
+import { showBackdrop } from './backdrop';
 import { activeScene, changeScene, getGm, setGm, useGm } from './store';
 
 export function imageSizeOf(item: Item, assets = getGm().assets) {
@@ -35,7 +36,8 @@ export function nextZ(scene: Scene, layer: Layer): number {
 }
 
 export function newImageItem(asset: Asset, scene: Scene): ImageItem {
-  const layer = layerForAssetType(asset.type);
+  // A backdrop is never placed by the GM; should one become an item anyway, it is a map.
+  const layer = layerForAssetType(asset.type === 'backdrop' ? 'map' : asset.type);
   return {
     id: nanoid(),
     kind: 'image',
@@ -65,6 +67,10 @@ export function anchorForCenter(item: ImageItem, asset: Asset, center: Vec2): Ve
 
 /** Adds an asset to the active scene centered at `world`. */
 export function placeAsset(asset: Asset, world: Vec2): Id | null {
+  if (asset.type === 'backdrop') {
+    showBackdrop(asset.id); // never an item: it covers the scene instead
+    return null;
+  }
   const scene = activeScene();
   if (!scene) return null;
   const item = newImageItem(asset, scene);

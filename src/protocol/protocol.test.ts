@@ -136,6 +136,14 @@ describe('messages', () => {
     expect(parsePlayerMessage(JSON.stringify(hello))).toEqual(hello);
     expect(parsePlayerMessage(JSON.stringify(msg))).toBeNull();
   });
+
+  it('carries the backdrop and its hiding', () => {
+    const ref = { hash: 'h', mime: 'image/jpeg', size: 10, width: 4, height: 3 };
+    const show = gmMessage({ type: 'backdrop', backdrop: ref });
+    expect(parseGmMessage(JSON.stringify(show))).toEqual(show);
+    const hide = gmMessage({ type: 'backdrop', backdrop: null });
+    expect(parseGmMessage(JSON.stringify(hide))).toEqual(hide);
+  });
 });
 
 describe('binary frames', () => {

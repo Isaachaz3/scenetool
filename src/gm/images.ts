@@ -71,6 +71,32 @@ export function useThumbUrl(thumbId: Id | undefined): string | undefined {
   return url;
 }
 
+/** Object URL of an asset's original file for DOM images; revoked when no longer shown. */
+export function useAssetUrl(asset: Asset | null): string | undefined {
+  const [url, setUrl] = useState<string | undefined>();
+  const id = asset?.id;
+  const hash = asset?.hash;
+  useEffect(() => {
+    const a = id ? getGm().assets[id] : undefined;
+    if (!a) {
+      setUrl(undefined);
+      return;
+    }
+    let alive = true;
+    let made: string | undefined;
+    void getAssetBlob(a).then((blob) => {
+      if (!alive || !blob) return;
+      made = URL.createObjectURL(blob);
+      setUrl(made);
+    });
+    return () => {
+      alive = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [id, hash]);
+  return url;
+}
+
 /** ~256 px WebP preview. */
 export async function makeThumbnail(blob: Blob, width: number, height: number): Promise<Blob> {
   const k = Math.min(1, THUMB_SIZE / Math.max(width, height));

@@ -10,6 +10,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  Presentation,
   Search,
   StickyNote,
   Trash2,
@@ -23,6 +24,7 @@ import { ASSET_TYPES } from '../../core/constants';
 import type { Asset, AssetType, Scene } from '../../core/types';
 import { t } from '../../i18n/ru';
 import { createCollection, selectCollection } from '../../state/assets';
+import { toggleBackdrop } from '../../state/backdrop';
 import { placeAsset } from '../../state/items';
 import { deleteScene, duplicateScene, openScene, renameScene } from '../../state/scenes';
 import { activeScene, getGm, useGm } from '../../state/store';
@@ -39,6 +41,7 @@ export const TYPE_ICONS: Record<AssetType, ReactNode> = {
   character: <User size={20} />,
   attachment: <Paperclip size={20} />,
   note: <StickyNote size={20} />,
+  backdrop: <Presentation size={20} />,
 };
 
 export function AssetTile({
@@ -56,7 +59,7 @@ export function AssetTile({
       type="button"
       className={'tile' + (active ? ' active' : '')}
       draggable
-      title={`${asset.name}\n${t.dock.dragHint}`}
+      title={`${asset.name}\n${asset.type === 'backdrop' ? t.backdrop.tileHint : t.dock.dragHint}`}
       onDragStart={(e) => {
         e.dataTransfer.setData(ASSET_MIME, asset.id);
         e.dataTransfer.effectAllowed = 'copy';
@@ -178,6 +181,7 @@ function Tray({ tab }: { tab: DockTab }) {
   const scenes = useGm((s) => s.scenes);
   const collectionId = useGm((s) => s.collectionId);
   const activeId = useGm((s) => s.activeSceneId);
+  const backdropId = useGm((s) => s.backdropId);
   const [query, setQuery] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -279,7 +283,12 @@ function Tray({ tab }: { tab: DockTab }) {
               <AssetTile
                 key={a.id}
                 asset={a}
-                onClick={() => placeAsset(getGm().assets[a.id], viewCenter())}
+                active={a.id === backdropId}
+                onClick={() =>
+                  a.type === 'backdrop'
+                    ? toggleBackdrop(a.id)
+                    : placeAsset(getGm().assets[a.id], viewCenter())
+                }
               />
             ))}
         {tab !== 'scenes' && list.length === 0 ? (

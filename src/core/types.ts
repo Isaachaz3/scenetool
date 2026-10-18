@@ -3,7 +3,9 @@
 export type Id = string; // nanoid
 export type Vec2 = { x: number; y: number };
 
-export type AssetType = 'map' | 'prop' | 'mount' | 'character' | 'attachment' | 'note';
+// 'backdrop': a picture shown over the whole scene on both screens, never placed on the canvas.
+export type AssetType = 'map' | 'prop' | 'mount' | 'character' | 'attachment' | 'note' | 'backdrop';
+export type PlaceableType = Exclude<AssetType, 'backdrop'>;
 export type GridSource = 'uvtt' | 'filename' | 'metadata' | 'heuristic' | 'manual' | 'fallback';
 
 export interface ImageGrid {

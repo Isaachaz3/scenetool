@@ -1,4 +1,13 @@
-import type { AppSettings, AssetType, DrawStyle, FogSettings, GridSettings, Layer, TextStyle } from './types';
+import type {
+  AppSettings,
+  AssetType,
+  DrawStyle,
+  FogSettings,
+  GridSettings,
+  Layer,
+  PlaceableType,
+  TextStyle,
+} from './types';
 
 /** One grid cell is always 150 world units. */
 export const CELL = 150;
@@ -31,9 +40,17 @@ export function layerRank(layer: Layer): number {
   return LAYER_ORDER.indexOf(layer);
 }
 
-export const ASSET_TYPES: AssetType[] = ['map', 'prop', 'mount', 'character', 'attachment', 'note'];
+export const ASSET_TYPES: AssetType[] = [
+  'map',
+  'prop',
+  'mount',
+  'character',
+  'attachment',
+  'note',
+  'backdrop',
+];
 
-export function layerForAssetType(type: AssetType): Layer {
+export function layerForAssetType(type: PlaceableType): Layer {
   return type;
 }
 

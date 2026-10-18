@@ -46,6 +46,7 @@ export function ImportDialog({ files, type: presetType }: { files: File[]; type?
 
   const size = useMemo(() => ({ mode: sizeMode, value: sizeValue }), [sizeMode, sizeValue]);
   const ready = rows.filter((r) => r.analyzed);
+  const isBackdrop = type === 'backdrop'; // shown over the scene: no grid, no item defaults
   const pending = rows.some((r) => !r.analyzed && !r.error);
 
   const close = () => openDialog(null);
@@ -117,43 +118,51 @@ export function ImportDialog({ files, type: presetType }: { files: File[]; type?
             ))}
           </select>
         </Field>
-        <Field label={t.importer.visible}>
-          <Toggle checked={visible} onChange={setVisible} label={t.importer.visible} />
-        </Field>
-        <Field label={t.importer.locked}>
-          <Toggle checked={locked} onChange={setLocked} label={t.importer.locked} />
-        </Field>
-        <Field label={t.importer.size}>
-          <select value={sizeMode} onChange={(e) => setSizeMode(e.target.value as SizeMode)}>
-            {(['auto', 'dpi', 'cols', 'rows'] as const).map((m) => (
-              <option key={m} value={m}>
-                {t.importer.sizeModes[m]}
-              </option>
-            ))}
-          </select>
-          {sizeMode !== 'auto' ? (
-            <NumberInput value={sizeValue} min={0.01} decimals={2} onChange={setSizeValue} />
-          ) : null}
-        </Field>
-        <Field label={t.importer.rotation}>
-          <Segmented
-            value={String(rotation)}
-            options={['0', '90', '180', '270'].map((v) => ({ value: v, label: `${v}°` }))}
-            onChange={(v) => setRotation(Number(v))}
-          />
-        </Field>
-        <Field label={t.importer.label}>
-          <select value={labelMode} onChange={(e) => setLabelMode(e.target.value as LabelMode)}>
-            {(['none', 'filename', 'custom'] as const).map((m) => (
-              <option key={m} value={m}>
-                {t.importer.labelModes[m]}
-              </option>
-            ))}
-          </select>
-          {labelMode === 'custom' ? (
-            <input className="text-input" value={labelText} onChange={(e) => setLabelText(e.target.value)} />
-          ) : null}
-        </Field>
+        {isBackdrop ? null : (
+          <>
+            <Field label={t.importer.visible}>
+              <Toggle checked={visible} onChange={setVisible} label={t.importer.visible} />
+            </Field>
+            <Field label={t.importer.locked}>
+              <Toggle checked={locked} onChange={setLocked} label={t.importer.locked} />
+            </Field>
+            <Field label={t.importer.size}>
+              <select value={sizeMode} onChange={(e) => setSizeMode(e.target.value as SizeMode)}>
+                {(['auto', 'dpi', 'cols', 'rows'] as const).map((m) => (
+                  <option key={m} value={m}>
+                    {t.importer.sizeModes[m]}
+                  </option>
+                ))}
+              </select>
+              {sizeMode !== 'auto' ? (
+                <NumberInput value={sizeValue} min={0.01} decimals={2} onChange={setSizeValue} />
+              ) : null}
+            </Field>
+            <Field label={t.importer.rotation}>
+              <Segmented
+                value={String(rotation)}
+                options={['0', '90', '180', '270'].map((v) => ({ value: v, label: `${v}°` }))}
+                onChange={(v) => setRotation(Number(v))}
+              />
+            </Field>
+            <Field label={t.importer.label}>
+              <select value={labelMode} onChange={(e) => setLabelMode(e.target.value as LabelMode)}>
+                {(['none', 'filename', 'custom'] as const).map((m) => (
+                  <option key={m} value={m}>
+                    {t.importer.labelModes[m]}
+                  </option>
+                ))}
+              </select>
+              {labelMode === 'custom' ? (
+                <input
+                  className="text-input"
+                  value={labelText}
+                  onChange={(e) => setLabelText(e.target.value)}
+                />
+              ) : null}
+            </Field>
+          </>
+        )}
       </div>
       <ul className="import-list">
         {rows.map((row, i) => {
@@ -161,7 +170,7 @@ export function ImportDialog({ files, type: presetType }: { files: File[]; type?
           const d = a ? describeDetection(detectFor(a, type, size)) : null;
           // The same file twice in one batch, or a file already in the library.
           const duplicate = a && (a.existing || rows.slice(0, i).some((r) => r.analyzed?.hash === a.hash));
-          const big = a && Math.max(a.width, a.height) > MAX_TEXTURE_SIDE;
+          const big = a && !isBackdrop && Math.max(a.width, a.height) > MAX_TEXTURE_SIDE;
           return (
             <li key={i}>
               <span className="import-name">{row.file.name}</span>
@@ -174,10 +183,10 @@ export function ImportDialog({ files, type: presetType }: { files: File[]; type?
                     <span className="muted">
                       <Check size={14} /> {t.gridSource.duplicate}
                     </span>
-                  ) : (
+                  ) : isBackdrop ? null : (
                     <span>{d!.text}</span>
                   )}
-                  {d?.warning && !duplicate ? (
+                  {d?.warning && !duplicate && !isBackdrop ? (
                     <span className="warn">
                       <AlertTriangle size={14} /> {d.warning}
                     </span>

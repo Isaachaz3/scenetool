@@ -5,7 +5,7 @@ import { AssetAssembler, decodeFrame } from '../protocol/binary';
 import type { GmLink } from '../protocol/link';
 import { OpenerLink, ReceiverLink } from '../protocol/links';
 import { playerMessage, type GmMessage, type ViewMessage } from '../protocol/messages';
-import { applyDiff, sceneHashes, type PlayerScene } from '../protocol/projection';
+import { applyDiff, sceneHashes, type AssetRef, type PlayerScene } from '../protocol/projection';
 import { BitmapCache } from '../render/bitmapCache';
 import { PointerTrail } from '../render/PointerTrail';
 
@@ -20,6 +20,8 @@ interface PlayerState {
   heard: boolean; // got anything from the GM
   measure: MeasureView | null;
   show: { ruler: boolean; pointer: boolean };
+  backdrop: AssetRef | null; // picture over the scene
+  filesTick: number; // bumps when an original file arrives
 }
 
 export const usePlayer = create<PlayerState>(() => ({
@@ -29,6 +31,8 @@ export const usePlayer = create<PlayerState>(() => ({
   heard: false,
   measure: null,
   show: { ruler: true, pointer: true },
+  backdrop: null,
+  filesTick: 0,
 }));
 
 /** The GM's laser pointer, drawn by the player canvas. */
@@ -37,6 +41,15 @@ export const pointerTrail = new PointerTrail();
 /** Original files by hash; kept in memory only, gone after a reload. */
 const files = new Map<string, Blob>();
 export const playerImages = new BitmapCache(async (hash) => files.get(hash), 2000);
+const fileUrls = new Map<string, string>();
+
+/** Object URL of a received file, for DOM images. */
+export function fileUrl(hash: string): string | undefined {
+  let url = fileUrls.get(hash);
+  const file = files.get(hash);
+  if (!url && file) fileUrls.set(hash, (url = URL.createObjectURL(file)));
+  return url;
+}
 
 const assembler = new AssetAssembler();
 let link: GmLink | null = null;
@@ -46,10 +59,13 @@ function send(msg: Parameters<typeof playerMessage>[0]) {
   link?.send(playerMessage(msg));
 }
 
-function requestMissing(scene: PlayerScene | null) {
-  if (!scene) return;
-  const missing = sceneHashes(scene).filter((h) => !files.has(h) && !assembler.isPending(h));
+function requestHashes(hashes: string[]) {
+  const missing = hashes.filter((h) => !files.has(h) && !assembler.isPending(h));
   if (missing.length > 0) send({ type: 'need-assets', hashes: missing });
+}
+
+function requestMissing(scene: PlayerScene | null) {
+  if (scene) requestHashes(sceneHashes(scene));
 }
 
 function setView(target: ViewMessage) {
@@ -97,6 +113,7 @@ function onMessage(msg: GmMessage) {
       if (blob) {
         files.set(msg.hash, blob);
         playerImages.invalidate(msg.hash);
+        usePlayer.setState((s) => ({ filesTick: s.filesTick + 1 }));
       }
       break;
     }
@@ -113,6 +130,10 @@ function onMessage(msg: GmMessage) {
     case 'settings':
       usePlayer.setState({ show: { ruler: msg.ruler, pointer: msg.pointer } });
       if (!msg.pointer) pointerTrail.clear();
+      break;
+    case 'backdrop':
+      usePlayer.setState({ backdrop: msg.backdrop });
+      if (msg.backdrop) requestHashes([msg.backdrop.hash]);
       break;
   }
 }

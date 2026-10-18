@@ -6,6 +6,7 @@ import {
   toggleLock,
   toggleVisible,
 } from '../state/items';
+import { showBackdrop } from '../state/backdrop';
 import { resetView } from '../state/scenes';
 import { getGm, redo, undo, useGm, type MeasureMode, type ToolId } from '../state/store';
 import { finishTextEdit } from '../state/text';
@@ -71,6 +72,7 @@ export function installHotkeys(): () => void {
 
     if (e.key === 'Escape') {
       if (useCanvasUi.getState().contextMenu) useCanvasUi.setState({ contextMenu: null });
+      else if (getGm().backdropId && !getUi().backdropMinimized) showBackdrop(null);
       else if (!cancelGesture()) useGm.setState({ selection: [] });
       return;
     }

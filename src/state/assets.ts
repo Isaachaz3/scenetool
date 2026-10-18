@@ -31,6 +31,7 @@ export async function deleteAsset(id: Id, opts: { fromCloud?: boolean } = {}): P
   const touched: Id[] = [];
   setGm((d) => {
     delete d.assets[id];
+    if (d.backdropId === id) d.backdropId = null;
     for (const scene of Object.values(d.scenes)) {
       let changed = false;
       for (const it of Object.values(scene.items)) {

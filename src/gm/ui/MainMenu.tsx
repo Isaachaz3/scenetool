@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useCloud } from '../../cloud/sync';
-import { t } from '../../i18n/ru';
+import { formatBytes, t } from '../../i18n/ru';
 import { useGm } from '../../state/store';
 import { openDialog, useUi } from '../../state/ui';
 import { openPlayerWindow, presentation } from '../playerHub';
@@ -103,6 +103,7 @@ function SaveIndicator() {
 function CloudChip() {
   const status = useCloud((s) => s.status);
   const error = useCloud((s) => s.error);
+  const usage = useCloud((s) => s.usage);
   const icon =
     status === 'syncing' ? (
       <RefreshCw size={16} className="spin" />
@@ -117,7 +118,10 @@ function CloudChip() {
     <button
       type="button"
       className={'panel status-chip cloud-chip ' + status}
-      title={status === 'error' && error ? error : t.cloud.status[status]}
+      title={
+        (status === 'error' && error ? error : t.cloud.status[status]) +
+        (usage ? '\n' + t.cloud.usageShort(formatBytes(usage.files), formatBytes(usage.database)) : '')
+      }
       onClick={() => openDialog({ kind: 'cloud' })}
     >
       {icon}
