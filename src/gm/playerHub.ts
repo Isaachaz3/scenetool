@@ -127,7 +127,7 @@ export class PlayerHub {
   }
 
   private publishStatus() {
-    useUi.setState((u) => ({ player: { ...u.player, links: this.count } }));
+    useUi.setState((u) => ({ player: { ...u.player, links: this.count, screen: this.primary()?.screen } }));
   }
 
   private handle(session: Session, msg: PlayerMessage) {
@@ -144,6 +144,7 @@ export class PlayerHub {
         break;
       case 'screen': {
         session.screen = { width: msg.width, height: msg.height };
+        this.publishStatus();
         if (getUi().follow && this.primary() === session) this.applyFollow();
         else if (session.ready) this.sendView(session, 0);
         break;

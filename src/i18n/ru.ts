@@ -119,6 +119,10 @@ export const ru = {
     hotkeys: 'Горячие клавиши',
   },
 
+  playerFrame: {
+    label: 'Экран игроков',
+  },
+
   playerStatus: {
     none: 'Экран игроков не подключён',
     connected: 'Экран игроков подключён',
@@ -186,6 +190,8 @@ export const ru = {
     paste: 'Вставить',
     label: 'Подпись',
     labelPrompt: 'Подпись под фишкой (пусто — убрать)',
+    attachTo: (name: string) => `Прикрепить к «${name}»`,
+    detach: 'Открепить',
   },
 
   align: {

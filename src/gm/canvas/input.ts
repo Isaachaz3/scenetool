@@ -2,8 +2,18 @@ import type Konva from 'konva';
 import { useEffect, type RefObject } from 'react';
 import { rectsIntersect, sub, type Rect } from '../../core/geometry';
 import type { Id, Vec2, Viewport } from '../../core/types';
-import { panBy, screenToWorld, worldToScreen, zoomAt } from '../../core/viewport';
-import { cloneItems, snapFor } from '../../state/items';
+import {
+  panBy,
+  screenToWorld,
+  viewportForScreen,
+  worldToScreen,
+  zoomAt,
+  zoomForFrameCorner,
+} from '../../core/viewport';
+import { hub } from '../playerHub';
+import { FRAME_CORNER_NAME, FRAME_NAME } from './PlayerFrame';
+import { descendants } from '../../core/attach';
+import { cloneItems, reattachDropped, snapFor } from '../../state/items';
 import { setGmViewport } from '../../state/scenes';
 import { activeScene, changeScene, getGm, useGm } from '../../state/store';
 import { finishTextEdit, startTextEdit } from '../../state/text';
@@ -37,10 +47,12 @@ type Gesture =
       copy: boolean;
       moved: boolean;
       collapseTo?: Id; // click without moving inside a multi-selection selects just this item
+      roots: Id[]; // the dragged items themselves; `orig` also has what is attached to them
       measure?: boolean; // Movement mode: a ruler follows the token
       waypoints?: Vec2[]; // Movement mode: bends fixed with W
     }
   | { kind: 'band'; start: Vec2; startWorld: Vec2; additive: boolean; moved: boolean }
+  | { kind: 'frame'; start: Vec2; startWorld: Vec2; resize: boolean; view: Viewport; moved: boolean }
   | { kind: 'tool'; start: Vec2; handler: ToolGesture; moved: boolean };
 
 const DRAG_THRESHOLD = 3; // screen px
@@ -55,9 +67,11 @@ function isTrackpadPan(e: WheelEvent): boolean {
   return !Number.isInteger(e.deltaY);
 }
 
-function hitTest(p: Vec2): { id: Id | null; transformer: boolean } {
+function hitTest(p: Vec2): { id: Id | null; transformer: boolean; frame?: 'move' | 'resize' } {
   const stage = stageRef.current;
   const shape = stage?.getIntersection(p);
+  if (shape?.hasName(FRAME_CORNER_NAME)) return { id: null, transformer: false, frame: 'resize' };
+  if (shape?.hasName(FRAME_NAME)) return { id: null, transformer: false, frame: 'move' };
   let n: Konva.Node | null = shape ?? null;
   while (n) {
     if (n.getClassName() === 'Transformer') return { id: null, transformer: true };
@@ -183,6 +197,20 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       }
       const hit = hitTest(p);
       if (hit.transformer) return; // Konva handles resize and rotation
+      if (hit.frame && e.button === 0) {
+        // The player view frame: its border moves the player view, a corner zooms it.
+        if (getUi().follow) hub.setFollow(false);
+        g.gesture = {
+          kind: 'frame',
+          start: p,
+          startWorld: world,
+          resize: hit.frame === 'resize',
+          view: scene.playerViewport,
+          moved: false,
+        };
+        useCanvasUi.setState({ gesture: 'drag' });
+        return;
+      }
       if (textEdit) {
         // A click elsewhere finishes the text being edited.
         finishTextEdit();
@@ -244,13 +272,18 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
           const it = scene.items[id];
           if (it && !it.locked) orig[id] = it.position;
         }
+        const roots = Object.keys(orig);
+        const copy = e.altKey && !movement;
+        // Riders and attachments move with their parent (copies leave them behind).
+        if (!copy) for (const id of descendants(roots, scene.items)) orig[id] = scene.items[id].position;
         g.gesture = {
           kind: 'drag',
           start: p,
           startWorld: world,
           leadId: item.id,
           orig,
-          copy: e.altKey && !movement,
+          roots,
+          copy,
           moved: false,
           collapseTo,
           measure: !!movement,
@@ -282,6 +315,8 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       gesture.moved = true;
       if (gesture.kind === 'pan') {
         setGmViewport(panBy(gesture.view, sub(p, gesture.start)));
+      } else if (gesture.kind === 'frame') {
+        movePlayerFrame(gesture, toWorld(p));
       } else if (gesture.kind === 'tool') {
         gesture.handler.move(toWorld(p), e);
       } else if (gesture.kind === 'drag') {
@@ -321,6 +356,8 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       g.gesture = null;
       if (gesture.kind === 'tool') {
         gesture.handler.up(toWorld(local(e)), e);
+      } else if (gesture.kind === 'frame') {
+        // done: the player view was updated live
       } else if (gesture.kind === 'pan') {
         if (!gesture.moved && gesture.clearOnClick) useGm.setState({ selection: [] });
       } else if (gesture.kind === 'drag') {
@@ -330,7 +367,7 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
         if (!gesture.moved || !drag) {
           if (gesture.collapseTo) useGm.setState({ selection: [gesture.collapseTo] });
         } else {
-          commitDrag(drag.positions, gesture.orig, gesture.copy);
+          commitDrag(drag.positions, gesture.orig, gesture.copy, gesture.roots);
         }
       } else {
         const band = useCanvasUi.getState().band;
@@ -413,11 +450,29 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
   }, [container]);
 }
 
+/** Player view from the frame being dragged; set for the connected screen, no undo. */
+function movePlayerFrame(gesture: { startWorld: Vec2; resize: boolean; view: Viewport }, world: Vec2) {
+  const scene = activeScene();
+  const screen = getUi().player.screen;
+  if (!scene || !screen) return;
+  const start = viewportForScreen(gesture.view, scene.playerViewRef, screen);
+  const next: Viewport = gesture.resize
+    ? { ...start, zoom: zoomForFrameCorner(start, world, screen) }
+    : { ...start, x: start.x + world.x - gesture.startWorld.x, y: start.y + world.y - gesture.startWorld.y };
+  changeScene(
+    (d) => {
+      d.playerViewport = next;
+      d.playerViewRef = screen;
+    },
+    { history: false },
+  );
+}
+
 /**
  * Drop: the dragged items take their new positions in one undo step. With Alt the originals
  * stay where they were and the copies (numbered discs count up) land at the drop point.
  */
-function commitDrag(positions: Record<Id, Vec2>, orig: Record<Id, Vec2>, copy: boolean) {
+function commitDrag(positions: Record<Id, Vec2>, orig: Record<Id, Vec2>, copy: boolean, roots: Id[]) {
   const scene = activeScene();
   if (!scene) return;
   const ids = Object.keys(positions).filter((id) => scene.items[id]);
@@ -438,5 +493,6 @@ function commitDrag(positions: Record<Id, Vec2>, orig: Record<Id, Vec2>, copy: b
   }
   changeScene((d) => {
     for (const id of ids) d.items[id].position = positions[id];
+    reattachDropped(d, roots);
   });
 }

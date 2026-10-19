@@ -22,6 +22,7 @@ export interface Toast {
 
 export interface PlayerStatus {
   links: number;
+  screen?: Size; // the first connected player screen, which the player view is set for
   presentationAvailable: boolean;
   presenting: boolean;
 }

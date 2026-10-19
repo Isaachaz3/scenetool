@@ -18,6 +18,7 @@ import { useUi } from '../../state/ui';
 import { gmImages } from '../images';
 import { gmPointerTrail, itemNodes, registerNode, stageRef, useCanvasUi } from './canvasState';
 import { handleCanvasDrop, isCanvasDrag } from './drop';
+import { PlayerFrame } from './PlayerFrame';
 import { useCanvasInput } from './input';
 
 const GmItem = memo(function GmItem({ item }: { item: Item }) {
@@ -347,6 +348,7 @@ function SceneContent({ items }: { items: Record<Id, Item> }) {
         <SelectionTransformer />
         <Band />
         <Drafts zoom={zoom} />
+        <PlayerFrame zoom={zoom} />
         <PointerTrailShape trail={gmPointerTrail} />
       </Layer>
     </>

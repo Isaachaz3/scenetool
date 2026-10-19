@@ -76,3 +76,21 @@ export function lerpViewport(a: Viewport, b: Viewport, t: number): Viewport {
   const zoom = Math.exp(Math.log(a.zoom) + (Math.log(b.zoom) - Math.log(a.zoom)) * e);
   return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, zoom };
 }
+
+/** World rectangle a player screen of `screen` size shows for the stored player view. */
+export function playerFrameRect(v: Viewport, ref: Size | undefined, screen: Size): Rect {
+  const actual = viewportForScreen(v, ref, screen);
+  return visibleRect(actual, screen);
+}
+
+/**
+ * Zoom of the player view whose corner is at `corner`: the frame keeps the screen proportions
+ * and follows the pointer along whichever side it reaches first.
+ */
+export function zoomForFrameCorner(center: Vec2, corner: Vec2, screen: Size): number {
+  const halfW = Math.max(
+    Math.abs(corner.x - center.x),
+    (Math.abs(corner.y - center.y) * screen.width) / screen.height,
+  );
+  return clampZoom(screen.width / (2 * Math.max(halfW, 1)));
+}

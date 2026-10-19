@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { CELL, DEFAULT_TEXT_STYLE, layerForAssetType } from '../core/constants';
+import { findCarrier } from '../core/attach';
 import { sortItems } from '../core/items';
 import { add, imageScale, rotate, snapItemPosition, sub } from '../core/geometry';
 import type {
@@ -153,8 +154,41 @@ export function deleteItems(ids: Id[]): void {
   if (ids.length === 0) return;
   changeScene((d) => {
     for (const id of ids) delete d.items[id];
+    // Riders of a deleted mount stay on the table, detached.
+    for (const it of Object.values(d.items))
+      if (it.attachedTo && ids.includes(it.attachedTo)) delete it.attachedTo;
   });
   useGm.setState((s) => ({ selection: s.selection.filter((id) => !ids.includes(id)) }));
+}
+
+/** Menu "Прикрепить": children keep their place and follow the parent from now on. */
+export function attachItems(childIds: Id[], parentId: Id): void {
+  const scene = activeScene();
+  if (!scene) return;
+  // Never attach a parent to its own child.
+  const above = new Set<Id>();
+  for (let p: Id | undefined = parentId; p && !above.has(p); p = scene.items[p]?.attachedTo) above.add(p);
+  const ids = childIds.filter((id) => id !== parentId && !above.has(id));
+  if (ids.length) updateItems(ids, (it) => void (it.attachedTo = parentId));
+}
+
+export function detachItems(ids: Id[]): void {
+  updateItems(ids, (it) => void delete it.attachedTo);
+}
+
+/**
+ * After a drop: a dragged character or attachment rides whatever carrier it landed on, and
+ * leaves its old parent when dropped elsewhere. Items moved along with their parent are kept.
+ */
+export function reattachDropped(d: Scene, roots: Id[]): void {
+  for (const id of roots) {
+    const it = d.items[id];
+    if (!it || (it.layer !== 'character' && it.layer !== 'attachment')) continue;
+    if (it.attachedTo && roots.includes(it.attachedTo)) continue;
+    const carrier = findCarrier(it, it.position, d.items, (x) => imageSizeOf(x));
+    if (carrier) it.attachedTo = carrier.id;
+    else delete it.attachedTo;
+  }
 }
 
 export function toggleVisible(ids: Id[]): void {
@@ -198,6 +232,9 @@ export function cloneItems(items: Item[], offset: Vec2, scene: Scene): Item[] {
     if (copy.kind === 'disc' && /^\d+$/.test(copy.text)) copy.text = String(nextDiscNumber(scene, copies));
     copies.push(copy);
   }
+  // Copies of a parent and its child stay together; a lone copied child rides the same parent.
+  const idOf = new Map(sortItems(items).map((src, i) => [src.id, copies[i].id]));
+  for (const c of copies) if (c.attachedTo && idOf.has(c.attachedTo)) c.attachedTo = idOf.get(c.attachedTo);
   return copies;
 }
 

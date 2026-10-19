@@ -1,4 +1,6 @@
 import {
+  Link,
+  Unlink,
   ArrowDown,
   ArrowUp,
   ClipboardCopy,
@@ -13,7 +15,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import type { Layer } from '../../core/types';
+import { pickParent } from '../../core/attach';
+import type { Item, Layer } from '../../core/types';
 import { t } from '../../i18n/ru';
 import {
   copyItems,
@@ -24,6 +27,8 @@ import {
   setSizeCells,
   toggleLock,
   toggleVisible,
+  attachItems,
+  detachItems,
 } from '../../state/items';
 import { activeScene, useGm } from '../../state/store';
 import { useUi } from '../../state/ui';
@@ -63,6 +68,11 @@ function Entry({
   );
 }
 
+function itemName(it: Item): string {
+  const label = it.kind === 'image' || it.kind === 'disc' ? it.label : undefined;
+  return label || it.name || (it.kind === 'disc' && it.text) || t.layers[it.layer];
+}
+
 /** Full menu on right click: everything the plaque has plus copy and alignment. */
 export function ContextMenu() {
   const at = useCanvasUi((s) => s.contextMenu);
@@ -88,6 +98,7 @@ export function ContextMenu() {
   if (!at || selected.length === 0) return null;
   const info = selectionInfo(selected);
   const { ids } = info;
+  const parent = pickParent(selected);
 
   return (
     <div
@@ -179,6 +190,21 @@ export function ContextMenu() {
           <Entry icon={<ArrowUp size={16} />} label={t.item.forward} onClick={() => moveZ(ids, 1)} />
           <Entry icon={<ArrowDown size={16} />} label={t.item.backward} onClick={() => moveZ(ids, -1)} />
         </>
+      ) : null}
+      {parent ? (
+        <Entry
+          icon={<Link size={16} />}
+          label={t.item.attachTo(itemName(parent))}
+          onClick={() =>
+            attachItems(
+              ids.filter((id) => id !== parent.id),
+              parent.id,
+            )
+          }
+        />
+      ) : null}
+      {selected.some((it) => it.attachedTo) ? (
+        <Entry icon={<Unlink size={16} />} label={t.item.detach} onClick={() => detachItems(ids)} />
       ) : null}
       {info.alignable ? (
         <Entry
