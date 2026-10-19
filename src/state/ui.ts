@@ -47,6 +47,8 @@ export interface UiState {
   preview: boolean;
   /** The shown backdrop is collapsed to a corner for the GM; players still see it. */
   backdropMinimized: boolean;
+  /** Start screen with the scenes and the player screen buttons. */
+  welcome: boolean;
 }
 
 const PREFS_KEY = 'vtt-lite:ui';
@@ -56,6 +58,7 @@ interface Prefs {
   toolbarCollapsed?: boolean;
   tool?: string;
   collectionId?: string;
+  welcomeOnStart?: boolean;
 }
 
 /** UI conveniences only; storage may be unavailable, so every access is guarded. */
@@ -91,6 +94,7 @@ export const useUi = create<UiState>(() => ({
   spaceDown: false,
   preview: false,
   backdropMinimized: false,
+  welcome: prefs.welcomeOnStart ?? true,
 }));
 
 export const getUi = useUi.getState;

@@ -1,4 +1,4 @@
-import type { MeasureView } from '../core/types';
+import type { MeasureView, Vec2 } from '../core/types';
 import type { AssetRef, PlayerScene, SceneDiff } from './projection';
 
 export const PROTOCOL_VERSION = 1;
@@ -26,7 +26,7 @@ export type GmMessage =
   | ({ type: 'measure'; measure: MeasureView | null } & V)
   | ({ type: 'pointer'; x: number; y: number; active: boolean } & V) // active: false = released
   | ({ type: 'settings'; ruler: boolean; pointer: boolean } & V)
-  | ({ type: 'backdrop'; backdrop: AssetRef | null } & V); // picture over the scene, null hides it
+  | ({ type: 'backdrop'; backdrop: AssetRef | null; focus?: Vec2 } & V); // over the scene; null hides it
 
 export type GmMessageType = GmMessage['type'];
 export type PlayerMessageType = PlayerMessage['type'];

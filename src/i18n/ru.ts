@@ -62,6 +62,10 @@ export const ru = {
     minimize: 'Свернуть у себя',
     expand: 'Развернуть',
     minimizedHint: 'Игроки видят фон, а вы — сцену',
+    auto: 'Авто',
+    autoHint: 'Кадр по самой детальной части картинки',
+    cropHint:
+      'Фон заполняет экран игроков целиком; светлая рамка — то, что они видят. Щёлкните или тяните, чтобы сдвинуть кадр.',
   },
 
   layers: {
@@ -117,6 +121,28 @@ export const ru = {
     cloud: 'Облако',
     settings: 'Настройки',
     hotkeys: 'Горячие клавиши',
+    welcome: 'Начальный экран',
+  },
+
+  welcome: {
+    title: 'VTT Lite',
+    subtitle: 'Стол для очной игры: ваш экран и экран игроков',
+    start: 'Начать',
+    newScene: 'Новая сцена',
+    sceneFromMap: 'Сцена из карты',
+    continue: (name: string) => `Продолжить: «${name}»`,
+    players: 'Экран игроков',
+    present: 'Вывести на второй экран',
+    presenting: 'Выводится на второй экран',
+    stopPresent: 'Остановить вывод',
+    playerWindow: 'Открыть окно игроков',
+    presentHint: 'Chrome или Edge: ТВ или монитор в режиме «Расширить», либо Chromecast.',
+    scenes: 'Сцены',
+    noScenes: 'Сцен пока нет — создайте первую из карты.',
+    search: 'Поиск сцены',
+    showOnStart: 'Показывать при запуске',
+    close: 'Закрыть',
+    edited: (date: string) => `изменена ${date}`,
   },
 
   playerFrame: {

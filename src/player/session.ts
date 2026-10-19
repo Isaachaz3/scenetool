@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { MeasureView, Viewport } from '../core/types';
+import type { MeasureView, Vec2, Viewport } from '../core/types';
 import { lerpViewport } from '../core/viewport';
 import { AssetAssembler, decodeFrame } from '../protocol/binary';
 import type { GmLink } from '../protocol/link';
@@ -21,6 +21,7 @@ interface PlayerState {
   measure: MeasureView | null;
   show: { ruler: boolean; pointer: boolean };
   backdrop: AssetRef | null; // picture over the scene
+  backdropFocus: Vec2 | undefined;
   filesTick: number; // bumps when an original file arrives
 }
 
@@ -32,6 +33,7 @@ export const usePlayer = create<PlayerState>(() => ({
   measure: null,
   show: { ruler: true, pointer: true },
   backdrop: null,
+  backdropFocus: undefined,
   filesTick: 0,
 }));
 
@@ -132,7 +134,7 @@ function onMessage(msg: GmMessage) {
       if (!msg.pointer) pointerTrail.clear();
       break;
     case 'backdrop':
-      usePlayer.setState({ backdrop: msg.backdrop });
+      usePlayer.setState({ backdrop: msg.backdrop, backdropFocus: msg.focus });
       if (msg.backdrop) requestHashes([msg.backdrop.hash]);
       break;
   }

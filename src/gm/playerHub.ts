@@ -25,7 +25,7 @@ class Session {
   view: Viewport | null = null;
   ref: Size | undefined;
   measure: MeasureView | null = null;
-  backdrop: string | null | undefined; // hash of the backdrop last sent; undefined: nothing sent yet
+  backdrop: string | null | undefined; // backdrop (file and focus) last sent; undefined: nothing yet
 
   constructor(readonly link: PlayerLink) {}
 }
@@ -241,10 +241,12 @@ export class PlayerHub {
   /** The backdrop over the scene, when it changed; its file follows on request like any image. */
   private sendBackdrop(session: Session) {
     const asset = shownBackdrop();
-    const hash = asset?.hash ?? null;
-    if (session.backdrop === hash) return;
-    session.backdrop = hash;
-    session.link.send(gmMessage({ type: 'backdrop', backdrop: asset ? assetRef(asset) : null }));
+    const key = asset ? `${asset.hash}@${asset.focus?.x},${asset.focus?.y}` : null;
+    if (session.backdrop === key) return;
+    session.backdrop = key;
+    session.link.send(
+      gmMessage({ type: 'backdrop', backdrop: asset ? assetRef(asset) : null, focus: asset?.focus }),
+    );
   }
 
   private sendSettings(session: Session) {

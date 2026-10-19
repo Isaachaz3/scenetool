@@ -1139,7 +1139,39 @@ kbd {
 
 .gm-backdrop-image img {
   display: block;
-  object-fit: contain;
+  object-fit: cover;
+}
+
+.gm-backdrop-frame {
+  position: absolute;
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.gm-backdrop-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.gm-backdrop-crop {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.gm-backdrop-hint {
+  position: absolute;
+  left: 50%;
+  top: 74px;
+  transform: translateX(-50%);
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 .gm-backdrop-bar {
@@ -1169,10 +1201,6 @@ kbd {
   border: 1px solid var(--line);
   overflow: hidden;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-}
-
-.gm-backdrop.minimized .gm-backdrop-image {
-  height: 158px;
 }
 
 .gm-backdrop.minimized .gm-backdrop-bar {
@@ -1332,4 +1360,163 @@ kbd {
 .visual-align-steps .step.active {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* --- start screen ---------------------------------------------------------------------------- */
+
+.welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 90; /* above the panels, below dialogs opened from it */
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 9, 14, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.welcome-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  width: min(1120px, 100%);
+  height: min(720px, 100%);
+  overflow: hidden;
+}
+
+.welcome-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.welcome-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px 24px;
+  background: var(--panel-2);
+  overflow-y: auto;
+}
+
+.welcome-title {
+  margin: 0;
+  font-family: 'Ruslan Display', Georgia, serif;
+  font-size: 40px;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.welcome-side h2,
+.welcome-main h2 {
+  margin: 18px 0 4px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.welcome-action {
+  justify-content: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+}
+
+.welcome-status {
+  margin: 0 0 4px;
+  color: var(--muted);
+}
+
+.welcome-status.on {
+  color: #4ade80;
+}
+
+.welcome-hint {
+  font-size: 12px;
+  margin: 0;
+}
+
+.welcome-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.welcome-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 10px 24px 24px;
+}
+
+.welcome-main-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 40px;
+}
+
+.welcome-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+  overflow-y: auto;
+  padding: 8px 2px;
+}
+
+.welcome-scene {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  background: var(--panel-2);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.welcome-scene:hover {
+  border-color: var(--accent);
+}
+
+.welcome-thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
+  background: #14151c;
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.welcome-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.welcome-scene-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcome-scene-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .welcome-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
 }

@@ -36,6 +36,7 @@ export interface Asset {
   height: number; // px
   grid: ImageGrid;
   defaults: AssetDefaults;
+  focus?: Vec2; // backdrops: point (0..1) the full-screen crop is centered on
   createdAt: number;
   updatedAt: number;
 }

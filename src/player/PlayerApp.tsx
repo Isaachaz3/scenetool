@@ -1,9 +1,10 @@
 import { Maximize } from 'lucide-react';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Layer, Stage } from 'react-konva';
+import { coverPosition } from '../core/cover';
 import { sortItems } from '../core/items';
 import { measureLabel } from '../core/measure';
-import type { FogShape, Item } from '../core/types';
+import type { FogShape, Item, Vec2 } from '../core/types';
 import { t } from '../i18n/ru';
 import type { AssetRef, PlayerScene } from '../protocol/projection';
 import { useBitmap } from '../render/bitmapCache';
@@ -106,9 +107,20 @@ function SceneLayers({ scene, zoom }: { scene: PlayerScene; zoom: number }) {
   );
 }
 
+const CENTER = { x: 0.5, y: 0.5 };
+
+/** The picture covers the screen; the cut-off part is chosen around the GM's focus. */
+function objectPosition(img: AssetRef, box: { width: number; height: number }, focus: Vec2) {
+  const p = coverPosition(img, box, focus);
+  return { objectPosition: `${p.x}% ${p.y}%` };
+}
+
 /** The GM's backdrop over the scene: fades in once its file is here, fades out when hidden. */
-function Backdrop() {
+function Backdrop({ size }: { size: { width: number; height: number } }) {
   const ref = usePlayer((s) => s.backdrop);
+  const focus = usePlayer((s) => s.backdropFocus) ?? CENTER;
+  const [shownRef, setShownRef] = useState(ref);
+  if (ref && ref !== shownRef) setShownRef(ref);
   usePlayer((s) => s.filesTick);
   const url = ref ? fileUrl(ref.hash) : undefined;
   const [last, setLast] = useState(url);
@@ -121,7 +133,7 @@ function Backdrop() {
         if (!url) setLast(undefined);
       }}
     >
-      <img src={last} alt="" />
+      <img src={last} alt="" style={shownRef ? objectPosition(shownRef, size, focus) : undefined} />
     </div>
   );
 }
@@ -176,7 +188,7 @@ export function PlayerApp() {
       >
         {scene ? <SceneLayers scene={scene} zoom={view.zoom} /> : null}
       </Stage>
-      <Backdrop />
+      <Backdrop size={size} />
       {!heard ? (
         <div className="player-message">{mode === 'none' ? t.player.noOpener : t.player.waiting}</div>
       ) : null}

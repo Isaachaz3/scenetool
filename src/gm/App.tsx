@@ -25,6 +25,7 @@ import { Dock } from './ui/Dock';
 import { GridViewPanel } from './ui/GridViewPanel';
 import { MainMenu } from './ui/MainMenu';
 import { Toolbar } from './ui/Toolbar';
+import { WelcomeScreen } from './ui/WelcomeScreen';
 import { ToolOptions } from './ui/ToolOptions';
 
 function DialogHost() {
@@ -87,6 +88,7 @@ export function App() {
       <Dock />
       <MainMenu />
       <GridViewPanel />
+      <WelcomeScreen />
       <DialogHost />
       <ConfirmPrompt />
       <Toasts />

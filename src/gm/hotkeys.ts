@@ -71,7 +71,8 @@ export function installHotkeys(): () => void {
     if (e.altKey) return;
 
     if (e.key === 'Escape') {
-      if (useCanvasUi.getState().contextMenu) useCanvasUi.setState({ contextMenu: null });
+      if (getUi().welcome && !getUi().dialog) useUi.setState({ welcome: false });
+      else if (useCanvasUi.getState().contextMenu) useCanvasUi.setState({ contextMenu: null });
       else if (getGm().backdropId && !getUi().backdropMinimized) showBackdrop(null);
       else if (!cancelGesture()) useGm.setState({ selection: [] });
       return;

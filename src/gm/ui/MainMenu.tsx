@@ -7,6 +7,7 @@ import {
   CloudOff,
   Database,
   Keyboard,
+  LayoutGrid,
   Menu,
   RefreshCw,
   Settings,
@@ -57,6 +58,9 @@ export function MainMenu() {
           </button>
           <button type="button" onClick={run(() => openDialog({ kind: 'hotkeys' }))}>
             <Keyboard size={18} /> {t.menu.hotkeys}
+          </button>
+          <button type="button" onClick={run(() => useUi.setState({ welcome: true }))}>
+            <LayoutGrid size={18} /> {t.menu.welcome}
           </button>
         </Panel>
       ) : null}
