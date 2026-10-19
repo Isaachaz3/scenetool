@@ -4,7 +4,7 @@ import { CELL } from '../../core/constants';
 import { snapToIntersection } from '../../core/geometry';
 import { measureLabel, rulerPoint } from '../../core/measure';
 import { simplify } from '../../core/simplify';
-import type { DrawingItem, FogShape, Id, Item, Scene, Vec2 } from '../../core/types';
+import type { DrawingItem, FogShape, Id, Item, RulerItem, Scene, Vec2 } from '../../core/types';
 import { nextZ } from '../../state/items';
 import { activeScene, changeScene, getGm, useGm } from '../../state/store';
 import { hub } from '../playerHub';
@@ -15,6 +15,8 @@ export interface ToolGesture {
   move(world: Vec2, e: PointerEvent): void;
   up(world: Vec2, e: PointerEvent): void;
   cancel(): void;
+  /** W while dragging: fix a bend of the ruler at the current end. */
+  waypoint?(): void;
 }
 
 const noSnap = (e: { ctrlKey: boolean; metaKey: boolean }) => e.ctrlKey || e.metaKey;
@@ -39,15 +41,24 @@ export function setMeasure(points: Vec2[] | null): void {
   hub.setMeasure(m);
 }
 
-/** Ruler: press at A, drag to B; ends snap to cell centers. It disappears on release. */
-function rulerGesture(start: Vec2, e: PointerEvent): ToolGesture {
+function rulerSnap(p: Vec2, e: { ctrlKey: boolean; metaKey: boolean }): Vec2 {
   const scene = activeScene()!;
-  const method = scene.grid.measurement;
-  const a = rulerPoint(start, method, scene.grid.snapping && !noSnap(e));
+  return rulerPoint(p, scene.grid.measurement, scene.grid.snapping && !noSnap(e));
+}
+
+/**
+ * Ruler: press at A, drag to B; ends snap to cell centers. W fixes a bend, distances add up
+ * over the segments. It disappears on release.
+ */
+function rulerGesture(start: Vec2, e: PointerEvent): ToolGesture {
+  const a = rulerSnap(start, e);
+  const fixed: Vec2[] = [a];
+  let end = a;
   setMeasure([a, a]);
   return {
     move(world, ev) {
-      setMeasure([a, rulerPoint(world, method, scene.grid.snapping && !noSnap(ev))]);
+      end = rulerSnap(world, ev);
+      setMeasure([...fixed, end]);
     },
     up() {
       setMeasure(null);
@@ -55,8 +66,94 @@ function rulerGesture(start: Vec2, e: PointerEvent): ToolGesture {
     cancel() {
       setMeasure(null);
     },
+    waypoint() {
+      const last = fixed[fixed.length - 1];
+      if (end.x !== last.x || end.y !== last.y) fixed.push(end);
+    },
   };
 }
+
+// --- permanent ruler (double click, then click by click) -----------------------------------------
+
+let pin: { points: Vec2[]; hover: Vec2 } | null = null;
+
+export function pinActive(): boolean {
+  return pin !== null;
+}
+
+function showPin() {
+  setMeasure(pin ? [...pin.points, pin.hover] : null);
+}
+
+/** Double click with the ruler: a ruler that stays starts here; clicks add bends. */
+export function startPin(world: Vec2, e: MouseEvent): void {
+  const p = rulerSnap(world, e);
+  pin = { points: [p], hover: p };
+  showPin();
+}
+
+export function pinClick(world: Vec2, e: PointerEvent): void {
+  if (!pin) return;
+  pin.points.push(rulerSnap(world, e));
+  showPin();
+}
+
+export function hoverPin(world: Vec2, e: { ctrlKey: boolean; metaKey: boolean }): void {
+  if (!pin) return;
+  pin.hover = rulerSnap(world, e);
+  showPin();
+}
+
+/** W while placing: a bend at the cursor. */
+export function pinWaypoint(): void {
+  if (!pin) return;
+  pin.points.push(pin.hover); // already snapped
+  showPin();
+}
+
+export function cancelPin(): void {
+  pin = null;
+  setMeasure(null);
+}
+
+/** Double click or Enter: the ruler becomes an item that can be moved and deleted. */
+export function finishPin(): void {
+  const cur = pin;
+  cancelPin();
+  const scene = activeScene();
+  if (!cur || !scene) return;
+  // The clicks of the finishing double click land on the same spot: keep one point there.
+  const near = 6 / zoom();
+  const pts = cur.points.filter(
+    (p, i, all) => i === 0 || Math.hypot(p.x - all[i - 1].x, p.y - all[i - 1].y) > near,
+  );
+  if (pts.length < 2) return;
+  const position = pts[0];
+  const ruler: RulerItem = {
+    id: nanoid(),
+    kind: 'ruler',
+    layer: 'ruler',
+    z: nextZ(scene, 'ruler'),
+    position,
+    rotation: 0,
+    scale: { x: 1, y: 1 },
+    visible: true,
+    locked: false,
+    points: pts.map((p) => ({ x: p.x - position.x, y: p.y - position.y })),
+  };
+  changeScene((d) => {
+    d.items[ruler.id] = ruler;
+  });
+}
+
+// Another tool or mode drops a ruler that is being placed.
+useGm.subscribe((s, prev) => {
+  if (
+    pin &&
+    (s.tool !== prev.tool || s.measureMode !== prev.measureMode || s.activeSceneId !== prev.activeSceneId)
+  )
+    cancelPin();
+});
 
 // --- pointer ---------------------------------------------------------------------------------
 

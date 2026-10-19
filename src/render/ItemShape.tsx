@@ -3,7 +3,8 @@ import { memo } from 'react';
 import { Circle, Ellipse, Group, Image as KImage, Label, Line, Rect, Tag, Text } from 'react-konva';
 import { CELL, FONT_FAMILIES, TEXT_BACKGROUND } from '../core/constants';
 import { imageBounds, imageScale } from '../core/geometry';
-import type { DiscToken, DrawingItem, ImageItem, Item, TextItem, Vec2 } from '../core/types';
+import type { DiscToken, DrawingItem, ImageItem, Item, RulerItem, TextItem, Vec2 } from '../core/types';
+import { MeasureShape } from './MeasureShape';
 import { textWidth } from './textMeasure';
 
 export interface ImageSource {
@@ -22,6 +23,8 @@ interface CommonProps {
   /** Click tolerance of drawings in world units (GM: a fixed number of screen pixels). */
   hitWidth?: number;
   hiddenFor?: boolean; // text being edited in place
+  /** Permanent rulers: distance label and the zoom that sets line and label sizes. */
+  ruler?: { label: string; zoom: number };
 }
 
 function ImageNode({
@@ -259,6 +262,30 @@ function TextNode({
   );
 }
 
+/** A ruler left on the table: same look as the live one, points relative to its position. */
+function RulerNode({
+  item,
+  position,
+  opacity,
+  listening,
+  nodeRef,
+  ruler,
+}: CommonProps & { item: RulerItem }) {
+  if (!ruler || item.points.length < 2) return null;
+  const p = position ?? item.position;
+  return (
+    <Group ref={nodeRef} id={item.id} name="item" x={p.x} y={p.y} opacity={opacity} listening={listening}>
+      <Line
+        points={item.points.flatMap((q) => [q.x, q.y])}
+        stroke="rgba(0,0,0,0)"
+        strokeWidth={1}
+        hitStrokeWidth={16 / ruler.zoom}
+      />
+      <MeasureShape measure={{ points: item.points, label: ruler.label }} zoom={ruler.zoom} />
+    </Group>
+  );
+}
+
 export interface ItemShapeProps extends CommonProps {
   item: Item;
   source?: ImageSource;
@@ -276,7 +303,9 @@ export const ItemShape = memo(function ItemShape(props: ItemShapeProps) {
       return <TextNode {...props} item={item} />;
     case 'drawing':
       return <DrawingNode {...props} item={item} />;
+    case 'ruler':
+      return <RulerNode {...props} item={item} />;
     default:
-      return null; // fog is drawn by its own layer; permanent rulers come in stage 3
+      return null; // fog is drawn by its own layer
   }
 });

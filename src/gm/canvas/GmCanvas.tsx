@@ -9,6 +9,7 @@ import { useBitmap } from '../../render/bitmapCache';
 import { FogLayerShape, type FogLook } from '../../render/FogLayer';
 import { GridShape, type GridLook } from '../../render/GridShape';
 import { ItemShape } from '../../render/ItemShape';
+import { measureLabel } from '../../core/measure';
 import { MeasureShape } from '../../render/MeasureShape';
 import { PointerTrailShape } from '../../render/PointerTrail';
 import { imageSizeOf } from '../../state/items';
@@ -29,8 +30,10 @@ const GmItem = memo(function GmItem({ item }: { item: Item }) {
     item.kind === 'drawing' ? Math.round(Math.log2(activeScene(s)?.gmViewport.zoom ?? 1) * 4) : 0,
   );
   const ref = useCallback((node: Konva.Node | null) => registerNode(item.id, node), [item.id]);
+  const ruler = useRulerLook(item);
   return (
     <ItemShape
+      ruler={ruler}
       item={item}
       position={override}
       opacity={item.visible ? 1 : HIDDEN_OPACITY}
@@ -42,6 +45,19 @@ const GmItem = memo(function GmItem({ item }: { item: Item }) {
     />
   );
 });
+
+/** Label and zoom of a permanent ruler; undefined for other items. */
+function useRulerLook(item: Item) {
+  const zoom = useGm((s) => (item.kind === 'ruler' ? (activeScene(s)?.gmViewport.zoom ?? 1) : 1));
+  const grid = useGm((s) => (item.kind === 'ruler' ? activeScene(s)?.grid : undefined));
+  return useMemo(
+    () =>
+      item.kind === 'ruler' && grid
+        ? { label: measureLabel(item.points, grid.measurement, grid.scale), zoom }
+        : undefined,
+    [item, grid, zoom],
+  );
+}
 
 /** Alt-drag and Movement leave translucent originals in place until the drop. */
 function Ghosts({ items }: { items: Record<Id, Item> }) {
@@ -99,7 +115,7 @@ function SelectionTransformer() {
       tool !== 'select' || !items || align
         ? []
         : selection
-            .filter((id) => items[id] && !items[id].locked)
+            .filter((id) => items[id] && !items[id].locked && items[id].kind !== 'ruler')
             .map((id) => itemNodes.get(id))
             .filter((n): n is Konva.Node => !!n);
     tr.nodes(nodes);

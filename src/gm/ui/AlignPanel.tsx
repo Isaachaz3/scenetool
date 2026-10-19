@@ -4,7 +4,10 @@ import type { Id, ImageGrid } from '../../core/types';
 import { t } from '../../i18n/ru';
 import { activeScene, changeScene, getGm, useGm } from '../../state/store';
 import { Panel } from './common';
+import { useBitmap } from '../../render/bitmapCache';
+import { gmImages } from '../images';
 import { GridFitFields, nudgeGrid } from './GridFit';
+import { VisualAlignButton } from './VisualAlign';
 
 /** "Выровнять по сетке": the map's anchor goes to a grid intersection and its grid is edited live. */
 export function startAlign(itemId: Id): void {
@@ -62,6 +65,7 @@ export function AlignPanel() {
   const align = useGm((s) => s.align);
   const item = useGm((s) => (s.align ? activeScene(s)?.items[s.align.itemId] : undefined));
   const asset = useGm((s) => (item?.kind === 'image' ? s.assets[item.assetId] : undefined));
+  const image = useBitmap(gmImages, asset?.id);
 
   useEffect(() => {
     if (!align) return;
@@ -104,6 +108,13 @@ export function AlignPanel() {
       <GridFitFields width={asset.width} height={asset.height} grid={item.grid} onChange={setLive} />
       <p className="hint">{t.align.keysHint}</p>
       <div className="row end">
+        <VisualAlignButton
+          image={image}
+          width={asset.width}
+          height={asset.height}
+          grid={item.grid}
+          onChange={setLive}
+        />
         <button type="button" className="btn" onClick={() => setLive({ ...asset.grid })}>
           {t.align.reset}
         </button>

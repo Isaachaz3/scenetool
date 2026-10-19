@@ -199,7 +199,25 @@ export const ru = {
     done: 'Готово',
     cancel: 'Отмена',
     reset: 'Сбросить',
+    candidates: 'Делится без остатка:',
+    candidate: (dpi: number, cols: number, rows: number) => `${num(dpi)} DPI · ${num(cols)}×${num(rows)}`,
     updateScene: 'Обновить выравнивание этой карты в открытой сцене?',
+  },
+
+  visualAlign: {
+    open: 'Визуальная подгонка',
+    stepNames: ['1. Угол', '2. Размер', '3. Уточнение'],
+    step1:
+      'Щёлкните или перетащите якорь на угол любой клетки карты. Колесо — масштаб, перетаскивание мимо якоря — сдвиг.',
+    step2: 'Тяните правую ручку, пока четыре клетки рамки не совпадут с четырьмя клетками карты.',
+    step3:
+      'Ручка у дальнего края убирает накопленный сдвиг: совместите её с пересечением линий карты. Shift — одна ось, Ctrl — медленно.',
+    values: (dpi: number, cols: number, rows: number) =>
+      `${num(dpi)} DPI → ${num(cols)} × ${num(rows)} ${cells(rows)}`,
+    keys: 'Enter — дальше, Esc — отмена',
+    back: 'Назад',
+    next: 'Дальше',
+    done: 'Готово',
   },
 
   gridSource: {
@@ -207,7 +225,9 @@ export const ru = {
     filename: (cols: number, rows: number) => `Имя файла: ${num(cols)} × ${num(rows)} ${cells(rows)}`,
     metadata: (format: string, dpi: number, cols: number, rows: number) =>
       `Метаданные ${format}: ${num(dpi)} DPI → ${num(cols)} × ${num(rows)} ${cells(rows)}`,
-    heuristic: 'Подбор по делимости',
+    heuristic: (dpi: number, cols: number, rows: number) =>
+      `Подбор по делимости: ${num(dpi)} DPI → ${num(cols)} × ${num(rows)} ${cells(rows)}`,
+    pickCandidate: 'выберите подходящий вариант ниже',
     manual: (dpi: number, cols: number, rows: number) =>
       `Вручную: ${num(dpi)} DPI → ${num(cols)} × ${num(rows)} ${cells(rows)}`,
     fallback: (dpi: number, cols: number, rows: number) =>
@@ -355,6 +375,8 @@ export const ru = {
       ['Добавить к выделению', 'Shift'],
       ['Копия при перетаскивании', 'Alt'],
       ['Отмена действия, убрать фон', 'Esc'],
+      ['Точка излома линейки', 'W во время протягивания'],
+      ['Постоянная линейка', 'двойной клик линейкой'],
       ['Завершить многоугольник / убрать угол', 'Enter / Backspace'],
       ['Предпросмотр глазами игроков', 'Shift+P'],
       ['Сбросить вид', 'Home'],
@@ -366,8 +388,9 @@ export const ru = {
     ruler: 'Линейка',
     movement: 'Движение',
     method: 'Метод',
-    rulerHint: 'Зажмите и тяните: концы встают в центры клеток (Ctrl — без привязки)',
-    movementHint: 'Тяните фишку: за ней тянется линейка, Esc возвращает на место',
+    rulerHint:
+      'Зажмите и тяните: концы встают в центры клеток (Ctrl — без привязки), W — точка излома. Двойной клик ставит постоянную линейку: щелчки — изломы, двойной клик или Enter — готово',
+    movementHint: 'Тяните фишку: за ней тянется линейка, W — точка излома, Esc возвращает на место',
   },
 
   draw: {

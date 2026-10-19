@@ -1257,3 +1257,79 @@ kbd {
     transform: rotate(360deg);
   }
 }
+
+.dpi-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.btn.small-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.btn.small-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- visual alignment ------------------------------------------------------------------------ */
+
+.visual-align {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: #0d0e13;
+}
+
+.visual-align-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.visual-align-canvas.panning {
+  cursor: grabbing;
+}
+
+.visual-align-bar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100vw - 32px));
+  padding: 12px 14px;
+}
+
+.visual-align-bar p {
+  margin: 6px 0;
+}
+
+.visual-align-steps {
+  display: flex;
+  gap: 6px;
+}
+
+.visual-align-steps .step {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.visual-align-steps .step.done {
+  color: inherit;
+}
+
+.visual-align-steps .step.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}

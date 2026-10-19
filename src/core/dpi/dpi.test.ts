@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { CELL } from '../constants';
 import { imagePointToWorld } from '../geometry';
 import type { ImageItem } from '../types';
-import { detectGrid, detectMapGrid, dividesEvenly, fromMetadata } from './detect';
+import {
+  detectGrid,
+  detectMapGrid,
+  divisibleDpis,
+  dividesEvenly,
+  fromDivisibility,
+  fromMetadata,
+} from './detect';
 import { baseName, parseGridFromName } from './filename';
 import { readImageInfo, type ImageInfo } from './metadata';
 
@@ -189,7 +196,23 @@ describe('grid detection cascade', () => {
     expect(dividesEvenly(4350, 3300, 72)).toBe(false);
     const info = readImageInfo(png(4350, 3300, 72));
     expect(fromMetadata(info, 4350, 3300)).toBeNull();
-    expect(detectMapGrid('x.png', info, 4350, 3300).grid.source).toBe('fallback');
+    // 4350 × 3300 still divides by 150: the divisibility guess takes over, flagged.
+    const d = detectMapGrid('x.png', info, 4350, 3300);
+    expect(d.grid).toMatchObject({ dpi: 150, source: 'heuristic' });
+    expect(d.needsCheck).toBe(true);
+  });
+
+  it('lists common resolutions both sides divide by', () => {
+    expect(divisibleDpis(4350, 3300)).toEqual([50, 75, 150]);
+    expect(divisibleDpis(3000, 2000)).toEqual([50, 100, 200]);
+    expect(divisibleDpis(600, 600)).toEqual([50, 75, 100, 120, 150]); // 150 → 4 cells, 200 → 3: too few
+    expect(divisibleDpis(1001, 997)).toEqual([]);
+  });
+
+  it('prefers the candidate closest to 150', () => {
+    expect(fromDivisibility(5120, 2560)?.grid.dpi).toBe(160);
+    expect(fromDivisibility(6000, 4000)?.grid.dpi).toBe(100); // a tie goes to the smaller one
+    expect(fromDivisibility(1001, 997)).toBeNull();
   });
 
   it('flags 72 and 96 DPI for checking', () => {
@@ -205,7 +228,7 @@ describe('grid detection cascade', () => {
   });
 
   it('falls back to 150 DPI', () => {
-    const d = detectMapGrid('x.png', noMeta, 1000, 1000);
+    const d = detectMapGrid('x.png', noMeta, 1001, 997);
     expect(d.grid).toEqual({ dpi: 150, offset: { x: 0, y: 0 }, source: 'fallback' });
     expect(d.needsCheck).toBe(true);
   });

@@ -12,6 +12,7 @@ import { useBitmap } from '../../../render/bitmapCache';
 import { gmImages } from '../../images';
 import { ACCEPT_ATTR, isImageFile } from '../../importer';
 import { AssetTile, CollectionSelect, SceneTile, TYPE_ICONS } from '../Dock';
+import { VisualAlignButton } from '../VisualAlign';
 import { Field, Modal, NumberInput, Segmented, Toggle } from '../common';
 import { FitPreview, GridFitFields, nudgeGrid } from '../GridFit';
 
@@ -107,6 +108,13 @@ function AssetEditor({ asset, onClose }: { asset: Asset; onClose: () => void }) 
           <FitPreview image={image} width={asset.width} height={asset.height} grid={grid} />
           <p className="hint">{t.align.keysHint}</p>
           <GridFitFields width={asset.width} height={asset.height} grid={grid} onChange={setGrid} />
+          <VisualAlignButton
+            image={image}
+            width={asset.width}
+            height={asset.height}
+            grid={grid}
+            onChange={setGrid}
+          />
         </>
       ) : (
         <Field label={t.manager.sizeCells}>

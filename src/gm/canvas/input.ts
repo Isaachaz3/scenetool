@@ -10,10 +10,17 @@ import { finishTextEdit, startTextEdit } from '../../state/text';
 import { getUi } from '../../state/ui';
 import { itemNodes, lastPointer, stageRef, useCanvasUi } from './canvasState';
 import {
+  cancelPin,
   cancelPolygon,
+  finishPin,
   finishPolygon,
+  hoverPin,
   hoverPolygon,
+  pinActive,
+  pinClick,
+  pinWaypoint,
   polygonActive,
+  startPin,
   setMeasure,
   startToolGesture,
   type ToolGesture,
@@ -31,6 +38,7 @@ type Gesture =
       moved: boolean;
       collapseTo?: Id; // click without moving inside a multi-selection selects just this item
       measure?: boolean; // Movement mode: a ruler follows the token
+      waypoints?: Vec2[]; // Movement mode: bends fixed with W
     }
   | { kind: 'band'; start: Vec2; startWorld: Vec2; additive: boolean; moved: boolean }
   | { kind: 'tool'; start: Vec2; handler: ToolGesture; moved: boolean };
@@ -103,6 +111,10 @@ const gestureState: { gesture: Gesture | null } = { gesture: null };
 export function cancelGesture(): boolean {
   const gesture = gestureState.gesture;
   if (!gesture) {
+    if (pinActive()) {
+      cancelPin();
+      return true;
+    }
     if (!polygonActive()) return false;
     cancelPolygon();
     return true;
@@ -112,6 +124,35 @@ export function cancelGesture(): boolean {
   if (gesture.kind === 'drag' && gesture.measure) setMeasure(null);
   useGm.setState({ drag: null });
   endGesture();
+  return true;
+}
+
+/** W: a bend in the ruler being dragged, the movement line or the ruler being placed. */
+export function addWaypoint(): boolean {
+  const gesture = gestureState.gesture;
+  if (gesture?.kind === 'tool' && gesture.handler.waypoint) {
+    gesture.handler.waypoint();
+    return true;
+  }
+  if (gesture?.kind === 'drag' && gesture.measure) {
+    const pos = getGm().drag?.positions[gesture.leadId];
+    if (!pos) return true;
+    const list = (gesture.waypoints ??= []);
+    const last = list[list.length - 1] ?? gesture.orig[gesture.leadId];
+    if (last && (last.x !== pos.x || last.y !== pos.y)) list.push(pos);
+    return true;
+  }
+  if (pinActive()) {
+    pinWaypoint();
+    return true;
+  }
+  return false;
+}
+
+/** Enter: finishes the ruler being placed. */
+export function finishPlacing(): boolean {
+  if (!pinActive()) return false;
+  finishPin();
   return true;
 }
 
@@ -156,6 +197,12 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
         return;
       }
       if (e.button !== 0) return;
+
+      // A ruler being placed takes clicks as bends.
+      if (pinActive()) {
+        if (tool === 'measure') pinClick(world, e);
+        return;
+      }
 
       // Movement: drag a token with a ruler from its start; elsewhere the tool measures.
       const movement =
@@ -227,6 +274,7 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       const gesture = g.gesture;
       if (!gesture) {
         if (polygonActive() && e.target instanceof Node && el.contains(e.target)) hoverPolygon(toWorld(p), e);
+        if (pinActive()) hoverPin(toWorld(p), e);
         return;
       }
       const dist = Math.hypot(p.x - gesture.start.x, p.y - gesture.start.y);
@@ -252,7 +300,7 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
         for (const [id, o] of Object.entries(gesture.orig))
           positions[id] = { x: o.x + delta.x, y: o.y + delta.y };
         useGm.setState({ drag: { positions, copy: gesture.copy, ghost: gesture.measure } });
-        if (gesture.measure) setMeasure([leadOrig, positions[gesture.leadId]]);
+        if (gesture.measure) setMeasure([leadOrig, ...(gesture.waypoints ?? []), positions[gesture.leadId]]);
       } else {
         const world = toWorld(p);
         const a = gesture.startWorld;
@@ -317,6 +365,12 @@ export function useCanvasInput(container: RefObject<HTMLDivElement | null>): voi
       if (!scene) return;
       if (polygonActive()) {
         finishPolygon();
+        return;
+      }
+      const { tool, measureMode } = getGm();
+      if (tool === 'measure' && measureMode === 'ruler') {
+        if (pinActive()) finishPin();
+        else startPin(toWorld(local(e)), e);
         return;
       }
       if (getGm().tool === 'draw' || getGm().tool === 'fog' || getGm().tool === 'pointer') return;

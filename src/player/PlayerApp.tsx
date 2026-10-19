@@ -2,6 +2,7 @@ import { Maximize } from 'lucide-react';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { Layer, Stage } from 'react-konva';
 import { sortItems } from '../core/items';
+import { measureLabel } from '../core/measure';
 import type { FogShape, Item } from '../core/types';
 import { t } from '../i18n/ru';
 import type { AssetRef, PlayerScene } from '../protocol/projection';
@@ -26,11 +27,20 @@ function useWindowSize() {
   return size;
 }
 
-const PlayerItem = memo(function PlayerItem({ item, asset: ref }: { item: Item; asset?: AssetRef }) {
+const PlayerItem = memo(function PlayerItem({
+  item,
+  asset: ref,
+  ruler,
+}: {
+  item: Item;
+  asset?: AssetRef;
+  ruler?: { label: string; zoom: number };
+}) {
   const image = useBitmap(playerImages, ref?.hash);
   return (
     <ItemShape
       item={item}
+      ruler={ruler}
       source={ref ? { image, width: ref.width, height: ref.height } : undefined}
       listening={false}
     />
@@ -79,6 +89,11 @@ function SceneLayers({ scene, zoom }: { scene: PlayerScene; zoom: number }) {
             key={it.id}
             item={it}
             asset={it.kind === 'image' ? scene.assets[it.assetId] : undefined}
+            ruler={
+              it.kind === 'ruler'
+                ? { label: measureLabel(it.points, g.measurement, g.scale), zoom }
+                : undefined
+            }
           />
         ))}
         {measure ? <MeasureShape measure={measure} zoom={zoom} /> : null}

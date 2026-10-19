@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ALIGN_GRID_COLOR } from '../../core/constants';
+import { divisibleDpis } from '../../core/dpi/detect';
 import type { ImageGrid } from '../../core/types';
 import { t } from '../../i18n/ru';
 import { NumberInput } from './common';
@@ -20,47 +21,65 @@ export function GridFitFields({
 }) {
   const set = (patch: Partial<ImageGrid>) => onChange({ ...grid, ...patch, source: 'manual' });
   const setDpi = (dpi: number) => dpi >= MIN_DPI && set({ dpi });
+  const candidates = divisibleDpis(width, height);
   return (
-    <div className="fit-fields">
-      <label>
-        <span>{t.align.cols}</span>
-        <NumberInput
-          value={width / grid.dpi}
-          decimals={2}
-          min={1}
-          onChange={(c) => c > 0 && setDpi(width / c)}
-        />
-      </label>
-      <label>
-        <span>{t.align.rows}</span>
-        <NumberInput
-          value={height / grid.dpi}
-          decimals={2}
-          min={1}
-          onChange={(r) => r > 0 && setDpi(height / r)}
-        />
-      </label>
-      <label>
-        <span>{t.align.dpi}</span>
-        <NumberInput value={grid.dpi} decimals={2} min={MIN_DPI} step={0.1} onChange={setDpi} />
-      </label>
-      <label>
-        <span>{t.align.offsetX}</span>
-        <NumberInput
-          value={grid.offset.x}
-          decimals={2}
-          onChange={(x) => set({ offset: { ...grid.offset, x } })}
-        />
-      </label>
-      <label>
-        <span>{t.align.offsetY}</span>
-        <NumberInput
-          value={grid.offset.y}
-          decimals={2}
-          onChange={(y) => set({ offset: { ...grid.offset, y } })}
-        />
-      </label>
-    </div>
+    <>
+      {candidates.length > 0 ? (
+        <div className="dpi-candidates">
+          <span className="muted">{t.align.candidates}</span>
+          {candidates.map((dpi) => (
+            <button
+              key={dpi}
+              type="button"
+              className={'btn small-btn' + (Math.abs(grid.dpi - dpi) < 0.005 ? ' active' : '')}
+              onClick={() => set({ dpi })}
+            >
+              {t.align.candidate(dpi, Math.round(width / dpi), Math.round(height / dpi))}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="fit-fields">
+        <label>
+          <span>{t.align.cols}</span>
+          <NumberInput
+            value={width / grid.dpi}
+            decimals={2}
+            min={1}
+            onChange={(c) => c > 0 && setDpi(width / c)}
+          />
+        </label>
+        <label>
+          <span>{t.align.rows}</span>
+          <NumberInput
+            value={height / grid.dpi}
+            decimals={2}
+            min={1}
+            onChange={(r) => r > 0 && setDpi(height / r)}
+          />
+        </label>
+        <label>
+          <span>{t.align.dpi}</span>
+          <NumberInput value={grid.dpi} decimals={2} min={MIN_DPI} step={0.1} onChange={setDpi} />
+        </label>
+        <label>
+          <span>{t.align.offsetX}</span>
+          <NumberInput
+            value={grid.offset.x}
+            decimals={2}
+            onChange={(x) => set({ offset: { ...grid.offset, x } })}
+          />
+        </label>
+        <label>
+          <span>{t.align.offsetY}</span>
+          <NumberInput
+            value={grid.offset.y}
+            decimals={2}
+            onChange={(y) => set({ offset: { ...grid.offset, y } })}
+          />
+        </label>
+      </div>
+    </>
   );
 }
 

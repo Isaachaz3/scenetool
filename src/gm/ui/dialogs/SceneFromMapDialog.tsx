@@ -18,6 +18,7 @@ import {
 import { describeDetection } from '../detectionText';
 import { Field, Modal } from '../common';
 import { FitPreview, GridFitFields, nudgeGrid } from '../GridFit';
+import { VisualAlignButton } from '../VisualAlign';
 
 /** Main path: pick a map, check the detected grid, create the scene in one step. */
 export function SceneFromMapDialog({ file: initial }: { file?: File }) {
@@ -187,6 +188,13 @@ export function SceneFromMapDialog({ file: initial }: { file?: File }) {
             ) : null}
             <GridFitFields width={analyzed.width} height={analyzed.height} grid={grid} onChange={setGrid} />
             <div className="row">
+              <VisualAlignButton
+                image={bitmap}
+                width={analyzed.width}
+                height={analyzed.height}
+                grid={grid}
+                onChange={setGrid}
+              />
               {auto ? (
                 <button type="button" className="btn" onClick={() => setGrid(auto.grid)}>
                   {t.align.reset}

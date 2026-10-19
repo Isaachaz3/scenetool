@@ -76,14 +76,45 @@ export function fromMetadata(info: ImageInfo, width: number, height: number): Gr
   };
 }
 
+/** Usual export resolutions, in pixels per cell. */
+export const COMMON_DPIS = [50, 64, 70, 72, 75, 96, 100, 110, 120, 128, 140, 150, 160, 180, 200, 256, 300];
+const MIN_CELLS = 4;
+const MAX_CELLS = 200;
+
+/** Common resolutions both sides divide by, giving 4 to 200 cells per side. */
+export function divisibleDpis(width: number, height: number): number[] {
+  return COMMON_DPIS.filter((dpi) => {
+    if (!dividesEvenly(width, height, dpi)) return false;
+    const cells = [Math.round(width / dpi), Math.round(height / dpi)];
+    return cells.every((n) => n >= MIN_CELLS && n <= MAX_CELLS);
+  });
+}
+
+/** Divisibility guess: the candidate closest to Dungeon Alchemist's usual 150; always flagged. */
+export function fromDivisibility(width: number, height: number): GridDetection | null {
+  const options = divisibleDpis(width, height);
+  if (options.length === 0) return null;
+  const dpi = options.reduce((best, d) =>
+    Math.abs(d - FALLBACK_DPI) < Math.abs(best - FALLBACK_DPI) ? d : best,
+  );
+  return {
+    ...withCells(width, height, gridOf(dpi, 'heuristic'), true),
+    cols: Math.round(width / dpi),
+    rows: Math.round(height / dpi),
+  };
+}
+
 export function fallbackGrid(width: number, height: number): GridDetection {
   return withCells(width, height, gridOf(FALLBACK_DPI, 'fallback'), true);
 }
 
-/** Map grid cascade: file name → DPI metadata → fallback (Universal VTT comes in stage 3). */
+/** Map grid cascade: file name → DPI metadata → divisibility → fallback. */
 export function detectMapGrid(name: string, info: ImageInfo, width: number, height: number): GridDetection {
   return (
-    fromFilename(name, width, height) ?? fromMetadata(info, width, height) ?? fallbackGrid(width, height)
+    fromFilename(name, width, height) ??
+    fromMetadata(info, width, height) ??
+    fromDivisibility(width, height) ??
+    fallbackGrid(width, height)
   );
 }
 

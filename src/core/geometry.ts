@@ -85,6 +85,12 @@ export function itemFootprint(item: Item, imageSize?: { width: number; height: n
  */
 export function snapItemPosition(item: Item, p: Vec2, imageSize?: { width: number; height: number }): Vec2 {
   if (item.kind === 'image' && item.layer === 'map') return snapToIntersection(p);
+  // A ruler starts at a cell center like its ends, unless it was placed without snapping.
+  if (item.kind === 'ruler') {
+    const c = snapToCellCenter(item.position);
+    const onCenter = Math.abs(c.x - item.position.x) < 0.01 && Math.abs(c.y - item.position.y) < 0.01;
+    return onCenter ? snapToCellCenter(p) : p;
+  }
   const fp = itemFootprint(item, imageSize);
   if (!fp) return snapToIntersection(p);
   return { x: snapAxis(p.x, fp.x), y: snapAxis(p.y, fp.y) };

@@ -11,7 +11,7 @@ import { resetView } from '../state/scenes';
 import { getGm, redo, undo, useGm, type MeasureMode, type ToolId } from '../state/store';
 import { finishTextEdit } from '../state/text';
 import { getUi, useUi, writePrefs } from '../state/ui';
-import { cancelGesture } from './canvas/input';
+import { addWaypoint, cancelGesture, finishPlacing } from './canvas/input';
 import { lastPointer, useCanvasUi } from './canvas/canvasState';
 import { cancelPolygon, finishPolygon, polygonActive, popPolygonPoint } from './canvas/tools';
 import { hub } from './playerHub';
@@ -76,6 +76,10 @@ export function installHotkeys(): () => void {
       else if (!cancelGesture()) useGm.setState({ selection: [] });
       return;
     }
+    if (e.key === 'Enter' && finishPlacing()) {
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Enter' && polygonActive()) {
       e.preventDefault();
       finishPolygon();
@@ -98,6 +102,10 @@ export function installHotkeys(): () => void {
       else if (letter === 'l') toggleLock(sel);
       else if (letter === 'y') hub.setFollow(!getUi().follow);
       else if (letter === 'p') useUi.setState({ preview: !getUi().preview });
+      return;
+    }
+    if (letter === 'w') {
+      if (addWaypoint()) e.preventDefault();
       return;
     }
     if (letter === 'r') return setTool('measure', 'ruler');

@@ -22,7 +22,7 @@ export function describeDetection(d: GridDetection): { text: string; warning?: s
     case 'uvtt':
       return { text: t.gridSource.uvtt };
     case 'heuristic':
-      return { text: t.gridSource.heuristic };
+      return { text: t.gridSource.heuristic(grid.dpi, cols, rows), warning: t.gridSource.pickCandidate };
     default:
       return {
         text: t.gridSource.fallback(grid.dpi, cols, rows),
