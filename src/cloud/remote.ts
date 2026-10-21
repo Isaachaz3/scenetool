@@ -1,5 +1,5 @@
 import type { DocKind } from '../core/sync';
-import type { Asset, Id } from '../core/types';
+import type { Id } from '../core/types';
 import { getSetting, putSetting } from '../db/db';
 
 /**
@@ -7,7 +7,7 @@ import { getSetting, putSetting } from '../db/db';
  * so the image loaders do not depend on Supabase themselves.
  */
 export const remoteFiles: {
-  file: ((asset: Asset) => Promise<Blob | null>) | null;
+  file: ((ref: { hash: string }) => Promise<Blob | null>) | null; // an asset or an audio track
   thumb: ((thumbId: Id) => Promise<Blob | null>) | null;
 } = { file: null, thumb: null };
 

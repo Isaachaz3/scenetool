@@ -1520,3 +1520,131 @@ kbd {
     overflow-y: auto;
   }
 }
+
+/* YouTube players of the ambient sound: kept out of sight. */
+#yt-ambient {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 200px;
+  height: 200px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* --- ambient sound ---------------------------------------------------------------------------- */
+
+.ambient-wrap {
+  position: absolute;
+  right: 92px; /* left of the grid button */
+  bottom: 16px;
+  z-index: 8;
+}
+
+.ambient-wrap > .ambient-chip {
+  height: 48px;
+}
+
+.ambient-chip {
+  max-width: 200px;
+}
+
+.ambient-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ambient-chip.on {
+  color: var(--accent);
+}
+
+.ambient-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 380px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ambient-panel h4 {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.ambient-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ambient-volume {
+  width: 40px;
+  text-align: right;
+  color: var(--muted);
+}
+
+.ambient-now {
+  margin: 0;
+}
+
+.ambient-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.ambient-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ambient-tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ambient-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ambient-track-icon {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.ambient-track-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ambient-track input[type='range'] {
+  width: 80px;
+}
+
+.ambient-add {
+  display: flex;
+  gap: 6px;
+}
+
+.ambient-add .text-input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}

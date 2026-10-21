@@ -7,6 +7,7 @@ import { ContextMenu } from './canvas/ContextMenu';
 import { SelectionPlaque } from './canvas/SelectionPlaque';
 import { TextEditor } from './canvas/TextEditor';
 import { AlignPanel } from './ui/AlignPanel';
+import { AmbientChip } from './ui/AmbientPanel';
 import { BackdropOverlay } from './ui/BackdropOverlay';
 import { AssetManager } from './ui/dialogs/AssetManager';
 import { CloudDialog } from './ui/dialogs/CloudDialog';
@@ -88,6 +89,7 @@ export function App() {
       <Dock />
       <MainMenu />
       <GridViewPanel />
+      <AmbientChip />
       <WelcomeScreen />
       <DialogHost />
       <ConfirmPrompt />

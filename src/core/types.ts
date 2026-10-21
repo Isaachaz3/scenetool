@@ -103,7 +103,29 @@ export interface Scene {
   // screen sizes show the same area. Absent until the first Sync View.
   playerViewRef?: Size;
   thumbId?: Id;
+  ambientTrackId?: Id; // plays while the scene is open, over the global ambient
   updatedAt: number;
+}
+
+/** Background sound, looped: a YouTube video or an audio file kept like an image asset. */
+export interface AmbientTrack {
+  id: Id;
+  name: string;
+  source: 'file' | 'youtube';
+  youtubeId?: string;
+  blobId?: Id; // file: original in the 'blobs' store
+  hash?: string; // file: SHA-256, for dedupe and the cloud path
+  mime?: string;
+  size?: number;
+  volume: number; // 0..1, evens out loud and quiet tracks
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AmbientSettings {
+  globalTrackId: Id | null; // keeps playing across scenes
+  volume: number; // 0..1, master
+  muted: boolean;
 }
 
 export type Layer =
@@ -177,6 +199,7 @@ export interface AppSettings {
   playerDefaults: { grid: boolean; ruler: boolean; pointer: boolean };
   fogGmOpacity: number;
   syncViewDuration: number; // ms
+  ambient: AmbientSettings;
 }
 
 /** A ruler or movement line as shown on both screens. */

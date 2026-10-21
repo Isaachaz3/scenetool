@@ -1,7 +1,7 @@
 // Pure decisions of the cloud sync: what to push, what a pulled row does locally.
-import type { Asset, Collection, Id, Scene } from './types';
+import type { AmbientTrack, Asset, Collection, Id, Scene } from './types';
 
-export type DocKind = 'collection' | 'asset' | 'scene';
+export type DocKind = 'collection' | 'asset' | 'track' | 'scene';
 
 /** A row of public.vtt_docs. */
 export interface RemoteDoc {
@@ -22,9 +22,9 @@ export interface LocalDoc {
 export const docKey = (kind: DocKind, id: Id) => `${kind}:${id}`;
 
 /** Change time of a document; collections are never edited, so their creation time is enough. */
-export function versionOf(kind: DocKind, doc: Scene | Asset | Collection): number {
+export function versionOf(kind: DocKind, doc: Scene | Asset | Collection | AmbientTrack): number {
   if (kind === 'collection') return (doc as Collection).createdAt;
-  return (doc as Scene | Asset).updatedAt;
+  return (doc as Scene | Asset | AmbientTrack).updatedAt;
 }
 
 /** Local documents changed since they were last pushed (or pulled). */

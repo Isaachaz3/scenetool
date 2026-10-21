@@ -4,7 +4,7 @@
 -- Scenes, assets and collections as JSON documents, one row per document and owner.
 create table if not exists public.vtt_docs (
   owner uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  kind text not null check (kind in ('collection', 'asset', 'scene')),
+  kind text not null check (kind in ('collection', 'asset', 'track', 'scene')),
   id text not null,
   data jsonb,
   updated_at bigint not null,          -- the document's own change time (ms)
@@ -12,6 +12,11 @@ create table if not exists public.vtt_docs (
   synced_at timestamptz not null default now(), -- server time of the last write, the pull cursor
   primary key (owner, kind, id)
 );
+
+-- Older projects: allow the kinds added later.
+alter table public.vtt_docs drop constraint if exists vtt_docs_kind_check;
+alter table public.vtt_docs add constraint vtt_docs_kind_check
+  check (kind in ('collection', 'asset', 'track', 'scene'));
 
 create index if not exists vtt_docs_synced on public.vtt_docs (owner, synced_at);
 

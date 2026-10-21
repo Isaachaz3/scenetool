@@ -14,13 +14,14 @@ import {
   type LocalDoc,
   type RemoteDoc,
 } from '../core/sync';
-import type { Asset, Collection, Scene } from '../core/types';
+import type { AmbientTrack, Asset, Collection, Scene } from '../core/types';
 import { db, getSetting, putSetting } from '../db/db';
 import { gmImages, notifyThumb } from '../gm/images';
 import { t } from '../i18n/ru';
 import { deleteAsset, selectCollection } from '../state/assets';
 import { flushScenes, markSaved } from '../state/persistence';
 import { deleteScene } from '../state/scenes';
+import { deleteTrack } from '../state/tracks';
 import { dropHistory, getGm, refreshHistoryFlags, setGm, useGm } from '../state/store';
 import { CLOUD_BUCKET, DOCS_TABLE, SUPABASE_KEY, SUPABASE_URL, USAGE_RPC } from './config';
 import { clearTombstones, deletionListeners, readTombstones, remoteFiles } from './remote';
@@ -63,13 +64,14 @@ interface Meta {
 
 const PAGE = 500;
 const BATCH = 25;
-const KIND_ORDER: Record<DocKind, number> = { collection: 0, asset: 1, scene: 2 };
+const KIND_ORDER: Record<DocKind, number> = { collection: 0, asset: 1, track: 1, scene: 2 };
 
 let client: SupabaseClient | null = null;
 let userId: string | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let running = false;
 let again = false;
+let tracksRefused = false; // the project's table predates audio tracks
 
 const metaKey = (uid: string) => `cloud:${uid}`;
 
@@ -119,7 +121,7 @@ function applySession(session: Session | null) {
     useCloud.setState({ status: 'signed-out', email: null, progress: null, usage: null });
     return;
   }
-  remoteFiles.file = (asset) => download(filePath(uid, asset.hash));
+  remoteFiles.file = (ref) => download(filePath(uid, ref.hash));
   remoteFiles.thumb = (thumbId) => download(thumbPath(uid, thumbId));
   const status = useCloud.getState().status;
   useCloud.setState({
@@ -204,6 +206,7 @@ export async function syncNow(): Promise<void> {
     return;
   }
   running = true;
+  tracksRefused = false;
   const uid = userId;
   useCloud.setState({ status: 'syncing', error: null });
   try {
@@ -216,7 +219,12 @@ export async function syncNow(): Promise<void> {
     await saveMeta(uid, meta);
     await pushChanges(client, uid, meta);
     await saveMeta(uid, meta);
-    useCloud.setState({ status: 'idle', lastSyncAt: Date.now(), progress: null });
+    useCloud.setState({
+      status: tracksRefused ? 'error' : 'idle',
+      error: tracksRefused ? t.cloud.errors.tracksSchema : null,
+      lastSyncAt: Date.now(),
+      progress: null,
+    });
     void refreshUsage();
   } catch (err) {
     console.warn('Cloud sync failed', err);
@@ -257,12 +265,24 @@ async function upsert(c: SupabaseClient, rows: object[]) {
 }
 
 async function pushDeletions(c: SupabaseClient, uid: string, meta: Meta) {
-  const list = await readTombstones();
+  let list = await readTombstones();
   if (list.length === 0) return;
-  await upsert(
-    c,
-    list.map((d) => ({ owner: uid, kind: d.kind, id: d.id, data: null, updated_at: d.at, deleted: true })),
-  );
+  const row = (d: (typeof list)[number]) => ({
+    owner: uid,
+    kind: d.kind,
+    id: d.id,
+    data: null,
+    updated_at: d.at,
+    deleted: true,
+  });
+  await upsert(c, list.filter((d) => d.kind !== 'track').map(row));
+  try {
+    await upsert(c, list.filter((d) => d.kind === 'track').map(row));
+  } catch (err) {
+    if ((err as { code?: string }).code !== '23514') throw err;
+    tracksRefused = true; // kept until schema.sql runs again
+    list = list.filter((d) => d.kind !== 'track');
+  }
   // The server keeps a newer edit from another device over an older deletion.
   const rows: RemoteDoc[] = [];
   const ids = [...new Set(list.map((d) => d.id))];
@@ -318,40 +338,72 @@ async function uploadFiles(c: SupabaseClient, uid: string, asset: Asset, meta: M
   }
 }
 
+/** Audio file of a track, uploaded once like an image. */
+async function uploadTrack(c: SupabaseClient, uid: string, track: AmbientTrack, meta: Meta) {
+  if (!track.hash || !track.blobId) return;
+  const file = filePath(uid, track.hash);
+  if (meta.uploaded[file]) return;
+  const blob = (await db.blobs.get(track.blobId))?.blob;
+  if (blob) {
+    const { error } = await c.storage
+      .from(CLOUD_BUCKET)
+      .upload(file, blob, { contentType: track.mime ?? 'audio/mpeg', upsert: true });
+    if (error) throw error;
+  }
+  meta.uploaded[file] = true;
+}
+
 async function pushChanges(c: SupabaseClient, uid: string, meta: Meta) {
   const s = getGm();
   const assets = Object.values(s.assets);
+  const tracks = Object.values(s.tracks);
   const needFiles = assets.filter(
     (a) => !meta.uploaded[filePath(uid, a.hash)] || !meta.uploaded[thumbPath(uid, a.thumbId)],
   );
+  const needTracks = tracks.filter((tr) => tr.hash && !meta.uploaded[filePath(uid, tr.hash)]);
+  const total = needFiles.length + needTracks.length;
   for (let i = 0; i < needFiles.length; i++) {
-    useCloud.setState({ progress: t.cloud.uploading(i + 1, needFiles.length) });
+    useCloud.setState({ progress: t.cloud.uploading(i + 1, total) });
     await uploadFiles(c, uid, needFiles[i], meta);
   }
-  const docs = new Map<string, Collection | Asset | Scene>();
+  for (let i = 0; i < needTracks.length; i++) {
+    useCloud.setState({ progress: t.cloud.uploading(needFiles.length + i + 1, total) });
+    await uploadTrack(c, uid, needTracks[i], meta);
+  }
+  const docs = new Map<string, Collection | Asset | Scene | AmbientTrack>();
   const local: LocalDoc[] = [];
-  const add = (kind: DocKind, doc: Collection | Asset | Scene) => {
+  const add = (kind: DocKind, doc: Collection | Asset | Scene | AmbientTrack) => {
     docs.set(docKey(kind, doc.id), doc);
     local.push({ kind, id: doc.id, version: versionOf(kind, doc) });
   };
   s.collections.forEach((x) => add('collection', x));
   assets.forEach((x) => add('asset', x));
+  tracks.forEach((x) => add('track', x));
   Object.values(s.scenes).forEach((x) => add('scene', x));
   const pending = pendingPush(local, meta.pushed);
   if (pending.length === 0) return;
   useCloud.setState({ progress: t.cloud.pushing });
-  await upsert(
-    c,
-    pending.map((d) => ({
-      owner: uid,
-      kind: d.kind,
-      id: d.id,
-      data: docs.get(docKey(d.kind, d.id)),
-      updated_at: d.version,
-      deleted: false,
-    })),
-  );
-  for (const d of pending) meta.pushed[docKey(d.kind, d.id)] = d.version;
+  const row = (d: LocalDoc) => ({
+    owner: uid,
+    kind: d.kind,
+    id: d.id,
+    data: docs.get(docKey(d.kind, d.id)),
+    updated_at: d.version,
+    deleted: false,
+  });
+  const library = pending.filter((d) => d.kind !== 'track');
+  await upsert(c, library.map(row));
+  for (const d of library) meta.pushed[docKey(d.kind, d.id)] = d.version;
+  // Tracks go separately: a project set up before them refuses the kind until schema.sql runs again.
+  const audio = pending.filter((d) => d.kind === 'track');
+  if (audio.length === 0) return;
+  try {
+    await upsert(c, audio.map(row));
+    for (const d of audio) meta.pushed[docKey(d.kind, d.id)] = d.version;
+  } catch (err) {
+    if ((err as { code?: string }).code !== '23514') throw err;
+    tracksRefused = true;
+  }
 }
 
 function localVersion(kind: DocKind, id: string): number | undefined {
@@ -361,6 +413,7 @@ function localVersion(kind: DocKind, id: string): number | undefined {
     return c ? versionOf('collection', c) : undefined;
   }
   if (kind === 'asset') return s.assets[id]?.updatedAt;
+  if (kind === 'track') return s.tracks[id]?.updatedAt;
   return s.scenes[id]?.updatedAt;
 }
 
@@ -443,6 +496,15 @@ async function applyRemote(row: RemoteDoc, uid: string, meta: Meta) {
       if (i >= 0) d.collections[i] = col;
       else d.collections.push(col);
     });
+  } else if (row.kind === 'track') {
+    const track = row.data as AmbientTrack;
+    const before = getGm().tracks[track.id];
+    if (before?.blobId && before.hash !== track.hash) await db.blobs.delete(before.blobId);
+    await db.tracks.put(track);
+    setGm((d) => {
+      d.tracks[track.id] = track;
+    });
+    if (track.hash) meta.uploaded[filePath(uid, track.hash)] = true;
   } else if (row.kind === 'asset') {
     const asset = row.data as Asset;
     const before = getGm().assets[asset.id];
@@ -471,6 +533,7 @@ async function applyRemote(row: RemoteDoc, uid: string, meta: Meta) {
 async function deleteLocal(kind: DocKind, id: string) {
   if (kind === 'scene') await deleteScene(id, { fromCloud: true });
   else if (kind === 'asset') await deleteAsset(id, { fromCloud: true });
+  else if (kind === 'track') await deleteTrack(id, { fromCloud: true });
   else {
     const s = getGm();
     if (s.collections.length <= 1) return; // a library always keeps one collection

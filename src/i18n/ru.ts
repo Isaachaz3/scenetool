@@ -124,6 +124,34 @@ export const ru = {
     welcome: 'Начальный экран',
   },
 
+  ambient: {
+    title: 'Эмбиент',
+    volume: 'Громкость',
+    play: 'Включить звук',
+    pause: 'Пауза',
+    silence: 'Тишина: выберите общий эмбиент или эмбиент сцены',
+    nowPlaying: (name: string, scene: boolean, paused: boolean) =>
+      `${paused ? 'На паузе' : 'Играет'}: «${name}»${scene ? ' (эмбиент сцены)' : ' (общий)'}`,
+    blocked: 'Браузер ждёт щелчка по странице, чтобы включить звук',
+    global: 'Общий — играет во всех сценах',
+    none: '— без звука —',
+    scene: (name: string) => `Сцена «${name}» — начинается при открытии сцены`,
+    sceneNone: '— как общий —',
+    library: 'Звуки',
+    empty: 'Добавьте ссылку на YouTube или аудиофайл.',
+    linkPlaceholder: 'Ссылка на YouTube',
+    addLink: 'Добавить',
+    addFile: 'Загрузить MP3 или другой аудиофайл',
+    added: (name: string) => `Добавлено: «${name}»`,
+    addFailed: 'не удалось добавить',
+    badLink: 'Не похоже на ссылку YouTube',
+    trackVolume: (v: number) => `Громкость дорожки: ${v}%`,
+    rename: 'Переименовать',
+    delete: 'Удалить',
+    deleteConfirm: (name: string) => `Удалить звук «${name}»? Сцены с ним перейдут на общий эмбиент.`,
+    hint: 'Всё играет по кругу и звучит из окна ведущего. Эмбиент сцены плавно перекрывает общий, а при уходе из сцены общий возвращается.',
+  },
+
   welcome: {
     title: 'VTT Lite',
     subtitle: 'Стол для очной игры: ваш экран и экран игроков',
@@ -504,6 +532,8 @@ export const ru = {
       rate: 'Слишком много писем подряд, подождите немного',
       network: 'Нет связи с облаком, проверьте интернет',
       schema: 'В облаке нет таблиц: запустите supabase/schema.sql в SQL Editor',
+      tracksSchema:
+        'Музыка не синхронизируется: запустите обновлённый supabase/schema.sql в SQL Editor ещё раз. Остальное в облаке.',
       generic: (m: string) => `Ошибка: ${m}`,
     },
   },

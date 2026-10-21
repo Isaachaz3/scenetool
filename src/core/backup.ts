@@ -30,6 +30,11 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/webp': 'webp',
   'image/avif': 'avif',
   'image/gif': 'gif',
+  'audio/mpeg': 'mp3',
+  'audio/ogg': 'ogg',
+  'audio/wav': 'wav',
+  'audio/mp4': 'm4a',
+  'audio/flac': 'flac',
 };
 
 export function blobPath(hash: string, mime: string): string {

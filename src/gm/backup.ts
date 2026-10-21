@@ -9,11 +9,12 @@ import {
   type ImportPlan,
   type LibraryData,
 } from '../core/backup';
-import type { Asset, Collection, Scene } from '../core/types';
+import type { AmbientTrack, Asset, Collection, Scene } from '../core/types';
 import { db, putSetting, SCHEMA_VERSION } from '../db/db';
 import { t } from '../i18n/ru';
 import { flushScenes, markSaved } from '../state/persistence';
 import { dropHistory, getGm, refreshHistoryFlags, setGm } from '../state/store';
+import { getTrackBlob } from '../state/tracks';
 import { getAssetBlob, makeThumbnail, notifyThumb } from './images';
 
 /**
@@ -22,10 +23,11 @@ import { getAssetBlob, makeThumbnail, notifyThumb } from './images';
  */
 export async function exportBackup(): Promise<Blob> {
   await flushScenes();
-  const [collections, scenes, assets] = await Promise.all([
+  const [collections, scenes, assets, tracks] = await Promise.all([
     db.collections.toArray(),
     db.scenes.toArray(),
     db.assets.toArray(),
+    db.tracks.toArray(),
   ]);
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let failure = null as Error | null;
@@ -59,6 +61,19 @@ export async function exportBackup(): Promise<Blob> {
     f.push(new Uint8Array(await blob.arrayBuffer()), true);
     written.add(path);
   }
+  // Ambient sound: tracks.json plus the audio files (YouTube tracks are only a link).
+  addJson('tracks.json', tracks);
+  for (const tr of tracks) {
+    if (!tr.hash) continue;
+    const path = blobPath(tr.hash, tr.mime ?? '');
+    if (written.has(path)) continue;
+    const blob = await getTrackBlob(tr);
+    if (!blob) continue;
+    const f = new ZipPassThrough(path);
+    zip.add(f);
+    f.push(new Uint8Array(await blob.arrayBuffer()), true);
+    written.add(path);
+  }
   zip.end();
   if (failure) throw failure;
   await putSetting('lastBackupAt', Date.now());
@@ -83,6 +98,7 @@ export function downloadBlob(blob: Blob, name: string): void {
 
 export interface ParsedBackup {
   data: LibraryData;
+  tracks: AmbientTrack[];
   files: Map<string, Uint8Array>; // zip path → bytes
 }
 
@@ -111,7 +127,37 @@ export async function readBackup(file: File): Promise<ParsedBackup> {
   }
   // Only assets whose file is in the archive can be restored.
   const restorable = assets.filter((a) => files.has(blobPath(a.hash, a.mime)));
-  return { data: { collections, scenes, assets: restorable }, files };
+  const tracks = (entries['tracks.json'] ? json<AmbientTrack[]>('tracks.json') : []).filter(
+    (tr) => tr.source === 'youtube' || (tr.hash && files.has(blobPath(tr.hash, tr.mime ?? ''))),
+  );
+  return { data: { collections, scenes, assets: restorable }, tracks, files };
+}
+
+/** Tracks the library does not have yet (same id, file or video counts as had). */
+async function importTracks(parsed: ParsedBackup) {
+  const have = Object.values(getGm().tracks);
+  const fresh = parsed.tracks.filter(
+    (tr) =>
+      !getGm().tracks[tr.id] &&
+      !have.some((h) => (tr.hash && h.hash === tr.hash) || (tr.youtubeId && h.youtubeId === tr.youtubeId)),
+  );
+  if (fresh.length === 0) return;
+  const blobs = fresh
+    .filter((tr) => tr.hash && tr.blobId)
+    .map((tr) => ({
+      id: tr.blobId!,
+      kind: 'audio' as const,
+      blob: new Blob([parsed.files.get(blobPath(tr.hash!, tr.mime ?? '')) as Uint8Array<ArrayBuffer>], {
+        type: tr.mime,
+      }),
+    }));
+  await db.transaction('rw', [db.tracks, db.blobs], async () => {
+    await db.blobs.bulkPut(blobs);
+    await db.tracks.bulkPut(fresh);
+  });
+  setGm((d) => {
+    for (const tr of fresh) d.tracks[tr.id] = tr;
+  });
 }
 
 function currentLibrary(): LibraryData {
@@ -144,6 +190,7 @@ export async function importBackup(parsed: ParsedBackup, policy: ConflictPolicy)
     for (const s of plan.scenes) d.scenes[s.id] = s;
   });
   for (const s of plan.scenes) markSaved(getGm().scenes[s.id]);
+  await importTracks(parsed);
   for (const id of plan.replacedScenes) dropHistory(id);
   refreshHistoryFlags();
   // Thumbnails are not in the archive: make them again in the background.

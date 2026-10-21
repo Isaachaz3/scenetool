@@ -5,6 +5,7 @@ import { loadFonts } from '../render/fonts';
 import { initCloud } from '../cloud/sync';
 import { focusFinder } from '../state/backdrop';
 import { boot } from '../state/boot';
+import { initAmbient } from './ambient';
 import { detectFocus } from './backdropFocus';
 import { App } from './App';
 import { installHotkeys } from './hotkeys';
@@ -16,5 +17,6 @@ void loadFonts();
 focusFinder.find = detectFocus;
 void boot().then(() => {
   initPlayerOutput();
+  initAmbient();
   void initCloud();
 });

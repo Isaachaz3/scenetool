@@ -34,6 +34,7 @@ export async function boot(): Promise<void> {
 
   // Assets are metadata only; files and thumbnails are loaded lazily.
   const assetList = await db.assets.toArray();
+  const trackList = await db.tracks.toArray();
   const sceneList = await db.scenes.toArray();
   const settings = { ...DEFAULT_SETTINGS, ...((await getSetting<AppSettings>('app')) ?? {}) };
   const lastSceneId = await getSetting<Id>('lastSceneId');
@@ -66,6 +67,7 @@ export async function boot(): Promise<void> {
     collections,
     collectionId,
     assets,
+    tracks: Object.fromEntries(trackList.map((tr) => [tr.id, tr])),
     scenes,
     activeSceneId: active?.id ?? null,
     tool,

@@ -1,12 +1,12 @@
 import Dexie, { type Table } from 'dexie';
-import type { Asset, Collection, Id, Scene } from '../core/types';
+import type { AmbientTrack, Asset, Collection, Id, Scene } from '../core/types';
 
 /** Bump together with a new `version()` block below; each block is one migration. */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export interface BlobRecord {
   id: Id;
-  kind: 'file' | 'thumb';
+  kind: 'file' | 'thumb' | 'audio';
   blob: Blob;
 }
 
@@ -21,6 +21,7 @@ export class VttDatabase extends Dexie {
   scenes!: Table<Scene, Id>;
   collections!: Table<Collection, Id>;
   settings!: Table<SettingRecord, string>;
+  tracks!: Table<AmbientTrack, Id>;
 
   constructor(name = 'vtt-lite') {
     super(name);
@@ -31,6 +32,8 @@ export class VttDatabase extends Dexie {
       collections: 'id, order',
       settings: 'key',
     });
+    // 2: ambient sound tracks.
+    this.version(2).stores({ tracks: 'id, hash, updatedAt' });
   }
 }
 

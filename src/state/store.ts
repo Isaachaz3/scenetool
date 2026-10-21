@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { DEFAULT_DRAW_STYLE, DEFAULT_SETTINGS, DEFAULT_TEXT_STYLE } from '../core/constants';
 import { History } from '../core/history';
 import type {
+  AmbientTrack,
   AppSettings,
   Asset,
   Collection,
@@ -51,6 +52,7 @@ export interface GmState {
   collections: Collection[];
   collectionId: Id;
   assets: Record<Id, Asset>;
+  tracks: Record<Id, AmbientTrack>; // ambient sound library
   scenes: Record<Id, Scene>;
   activeSceneId: Id | null;
   backdropId: Id | null; // backdrop asset shown over the scene on both screens
@@ -75,6 +77,7 @@ export const useGm = create<GmState>(() => ({
   collections: [],
   collectionId: '',
   assets: {},
+  tracks: {},
   scenes: {},
   activeSceneId: null,
   backdropId: null,
