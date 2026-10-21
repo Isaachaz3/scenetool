@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { ambientTarget, fadeStep, parseYouTubeId } from './ambient';
-import type { AmbientTrack } from './types';
+import {
+  dbToMeter,
+  faderToDb,
+  faderToGain,
+  formatDb,
+  globalChannels,
+  mixPlan,
+  parseYouTubeId,
+  sceneAmbient,
+} from './ambient';
+import type { AmbientTrack, Scene } from './types';
 
 const track = (id: string): AmbientTrack => ({
   id,
@@ -11,6 +20,7 @@ const track = (id: string): AmbientTrack => ({
   createdAt: 0,
   updatedAt: 0,
 });
+const ch = (trackId: string, volume = 1, muted = false) => ({ trackId, volume, muted });
 
 describe('ambient', () => {
   it('reads YouTube links of every common shape', () => {
@@ -34,18 +44,42 @@ describe('ambient', () => {
     expect(parseYouTubeId('не ссылка')).toBeNull();
   });
 
-  it('plays the scene track over the global one', () => {
-    const tracks = { a: track('a'), b: track('b') };
-    expect(ambientTarget('b', 'a', tracks)).toEqual({ slot: 'scene', trackId: 'b' });
-    expect(ambientTarget(undefined, 'a', tracks)).toEqual({ slot: 'global', trackId: 'a' });
-    expect(ambientTarget('a', 'a', tracks)).toEqual({ slot: 'global', trackId: 'a' });
-    expect(ambientTarget('gone', 'a', tracks)).toEqual({ slot: 'global', trackId: 'a' });
-    expect(ambientTarget(undefined, null, tracks)).toBeNull();
+  it('maps faders to dB like OBS', () => {
+    expect(faderToDb(1)).toBeCloseTo(0);
+    expect(faderToDb(0.5)).toBe(-30);
+    expect(faderToDb(0)).toBe(-Infinity);
+    expect(faderToGain(1)).toBe(1);
+    expect(faderToGain(0.9)).toBeCloseTo(0.5012, 3); // −6 dB
+    expect(faderToGain(0)).toBe(0);
+    expect(formatDb(-4.66)).toBe('−4,7 dB');
+    expect(formatDb(-Infinity)).toBe('−∞ dB');
+    expect(dbToMeter(-30)).toBe(0.5);
+    expect(dbToMeter(-90)).toBe(0);
   });
 
-  it('fades without overshooting', () => {
-    expect(fadeStep(0, 1, 0.3)).toBeCloseTo(0.3);
-    expect(fadeStep(0.9, 1, 0.3)).toBe(1);
-    expect(fadeStep(0.2, 0, 0.3)).toBe(0);
+  it('mixes global and scene channels', () => {
+    const tracks = { rain: track('rain'), tavern: track('tavern'), battle: track('battle') };
+    const global = [ch('rain', 1), ch('tavern', 0.9, true)];
+    // A scene without channels: globals play.
+    expect(mixPlan(global, { channels: [], muteGlobal: true }, tracks)).toEqual([
+      { slot: 'global', trackId: 'rain', active: true, gain: 1 },
+      { slot: 'global', trackId: 'tavern', active: true, gain: 0 },
+    ]);
+    // Battle replaces the globals...
+    const battle = mixPlan(global, { channels: [ch('battle')], muteGlobal: true }, tracks);
+    expect(battle.filter((v) => v.active).map((v) => v.trackId)).toEqual(['battle']);
+    // ...or plays over them.
+    const layered = mixPlan(global, { channels: [ch('battle')], muteGlobal: false }, tracks);
+    expect(layered.filter((v) => v.active).map((v) => v.trackId)).toEqual(['rain', 'tavern', 'battle']);
+    // Deleted tracks drop out; a scene whose only track is gone does not mute the globals.
+    expect(mixPlan(global, { channels: [ch('gone')], muteGlobal: true }, tracks).every((v) => v.active)).toBe(
+      true,
+    );
+  });
+
+  it('reads settings and scenes saved before the mixer', () => {
+    expect(globalChannels({ globalTrackId: 'a', volume: 1, muted: false } as never)).toEqual([ch('a')]);
+    expect(sceneAmbient({ ambientTrackId: 'b' } as Scene)).toEqual({ channels: [ch('b')], muteGlobal: true });
+    expect(sceneAmbient(null)).toEqual({ channels: [], muteGlobal: true });
   });
 });

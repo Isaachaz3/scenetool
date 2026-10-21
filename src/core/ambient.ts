@@ -1,5 +1,5 @@
 // Ambient sound: which track plays and how YouTube links are read.
-import type { AmbientTrack, Id } from './types';
+import type { AmbientChannel, AmbientSettings, AmbientTrack, Id, Scene, SceneAmbient } from './types';
 
 const ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -26,22 +26,65 @@ export function parseYouTubeId(input: string): string | null {
 
 export type AmbientSlot = 'global' | 'scene';
 
-/**
- * What should be heard: the scene's track while the scene has one, otherwise the global one.
- * A scene track equal to the global one keeps the global one going instead of restarting it.
- */
-export function ambientTarget(
-  sceneTrackId: Id | undefined,
-  globalTrackId: Id | null,
-  tracks: Record<Id, AmbientTrack>,
-): { slot: AmbientSlot; trackId: Id } | null {
-  const scene = sceneTrackId && tracks[sceneTrackId] ? sceneTrackId : null;
-  const global = globalTrackId && tracks[globalTrackId] ? globalTrackId : null;
-  if (scene && scene !== global) return { slot: 'scene', trackId: scene };
-  return global ? { slot: 'global', trackId: global } : null;
+const FLOOR_DB = -60;
+
+/** Fader position (0..1) to dB, OBS style: linear in dB from −60 to 0; 0 is silence. */
+export function faderToDb(v: number): number {
+  return v <= 0 ? -Infinity : (1 - Math.min(1, v)) * FLOOR_DB;
 }
 
-/** One step of a fade: moves `level` toward `target` by `step`. */
-export function fadeStep(level: number, target: number, step: number): number {
-  return level < target ? Math.min(target, level + step) : Math.max(target, level - step);
+export function faderToGain(v: number): number {
+  const db = faderToDb(v);
+  return db === -Infinity ? 0 : 10 ** (db / 20);
+}
+
+export function formatDb(db: number): string {
+  return db === -Infinity ? '−∞ dB' : `${db.toFixed(1).replace('-', '−').replace('.', ',')} dB`;
+}
+
+/** Meter position (0..1) of a level in dB, on the same −60..0 scale as the faders. */
+export function dbToMeter(db: number): number {
+  return db <= FLOOR_DB ? 0 : Math.min(1, 1 - db / FLOOR_DB);
+}
+
+/** Global channels, also from settings saved before the mixer. */
+export function globalChannels(a: AmbientSettings): AmbientChannel[] {
+  if (a.channels) return a.channels;
+  return a.globalTrackId ? [{ trackId: a.globalTrackId, volume: 1, muted: false }] : [];
+}
+
+/** Scene channels, also from scenes saved before the mixer (one track that replaced the global). */
+export function sceneAmbient(scene: Scene | null | undefined): SceneAmbient {
+  if (scene?.ambient) return scene.ambient;
+  if (scene?.ambientTrackId)
+    return { channels: [{ trackId: scene.ambientTrackId, volume: 1, muted: false }], muteGlobal: true };
+  return { channels: [], muteGlobal: true };
+}
+
+export interface VoicePlan {
+  slot: AmbientSlot;
+  trackId: Id;
+  active: boolean; // false: silent and paused (a global channel muted by the scene)
+  gain: number; // channel gain, before the master
+}
+
+/**
+ * What the mixer plays: every global channel, paused while the open scene has channels and
+ * mutes the global ones, plus the scene's channels. Tracks that are gone are left out.
+ */
+export function mixPlan(
+  global: AmbientChannel[],
+  scene: SceneAmbient,
+  tracks: Record<Id, AmbientTrack>,
+): VoicePlan[] {
+  const exists = (c: AmbientChannel) => !!tracks[c.trackId];
+  const sceneOn = scene.channels.filter(exists);
+  const ducked = sceneOn.length > 0 && scene.muteGlobal;
+  const gain = (c: AmbientChannel) => (c.muted ? 0 : faderToGain(c.volume));
+  return [
+    ...global
+      .filter(exists)
+      .map((c) => ({ slot: 'global' as const, trackId: c.trackId, active: !ducked, gain: gain(c) })),
+    ...sceneOn.map((c) => ({ slot: 'scene' as const, trackId: c.trackId, active: true, gain: gain(c) })),
+  ];
 }

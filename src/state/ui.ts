@@ -7,7 +7,7 @@ export type Dialog =
   | { kind: 'import'; files: File[]; type?: AssetType }
   | { kind: 'sceneFromMap'; file?: File }
   | { kind: 'newScene' }
-  | { kind: 'assetManager'; tab?: DockTab; assetId?: Id }
+  | { kind: 'assetManager'; tab?: DockTab | 'ambient'; assetId?: Id }
   | { kind: 'settings' }
   | { kind: 'storage' }
   | { kind: 'cloud' }

@@ -78,7 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   playerDefaults: { grid: true, ruler: true, pointer: true },
   fogGmOpacity: 0.4,
   syncViewDuration: 400,
-  ambient: { globalTrackId: null, volume: 0.6, muted: false },
+  ambient: { channels: [], volume: 0.85, muted: false },
 };
 
 export const DEFAULT_TEXT_STYLE: TextStyle = {

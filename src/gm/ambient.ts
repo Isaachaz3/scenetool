@@ -1,66 +1,108 @@
 import { create } from 'zustand';
-import { ambientTarget, fadeStep, type AmbientSlot } from '../core/ambient';
+import { faderToGain, globalChannels, mixPlan, sceneAmbient, type AmbientSlot } from '../core/ambient';
 import type { AmbientTrack, Id } from '../core/types';
 import { activeScene, getGm, useGm } from '../state/store';
 import { getTrackBlob } from '../state/tracks';
 
-const FADE_MS = 1500;
-const TICK_MS = 50;
+const FADE_S = 0.5; // time constant of file fades (about 1.5 s to silence)
+const FADE_DONE_MS = 1800;
 const YT_HOST_ID = 'yt-ambient';
 
-/** What the panel shows: the track heard now and whether the browser still blocks sound. */
-export const useAmbient = create<{ playing: { trackId: Id; slot: AmbientSlot } | null; blocked: boolean }>(
-  () => ({ playing: null, blocked: false }),
-);
+/** Whether the browser still waits for a click before it lets sound play. */
+export const useAmbient = create<{ blocked: boolean }>(() => ({ blocked: false }));
+
+// --- Web Audio graph: file channels → their gain → analyser → master gain → analyser → out ------
+
+let ctx: AudioContext | null = null;
+let master: GainNode | null = null;
+let masterMeter: AnalyserNode | null = null;
+
+function audio(): { ctx: AudioContext; master: GainNode } {
+  if (!ctx) {
+    ctx = new AudioContext();
+    master = ctx.createGain();
+    masterMeter = ctx.createAnalyser();
+    masterMeter.fftSize = 1024;
+    master.connect(masterMeter).connect(ctx.destination);
+    master.gain.value = masterGain();
+  }
+  if (ctx.state === 'suspended') {
+    // Without a click on the page the context may stay suspended: wait for one.
+    const c = ctx;
+    void c.resume().then(() => c.state === 'running' && useAmbient.setState({ blocked: false }));
+    blockedUntilGesture();
+  }
+  return { ctx, master: master! };
+}
+
+function masterGain(): number {
+  const a = getGm().settings.ambient;
+  return a.muted ? 0 : faderToGain(a.volume);
+}
 
 interface Source {
-  volume(v: number): void; // 0..1
+  setGain(g: number, smooth: boolean): void; // channel gain × active, before the master
   play(): void;
   pause(): void;
   destroy(): void;
+  meter: AnalyserNode | null; // files only: YouTube audio cannot be measured
 }
 
-// --- audio files -----------------------------------------------------------------------------
-
 function fileSource(track: AmbientTrack): Source {
-  const audio = new Audio();
-  audio.loop = true;
-  audio.preload = 'auto';
+  const { ctx: c, master: out } = audio();
+  const el = new Audio();
+  el.loop = true;
+  el.preload = 'auto';
+  const node = c.createMediaElementSource(el);
+  const gain = c.createGain();
+  gain.gain.value = 0;
+  const meter = c.createAnalyser();
+  meter.fftSize = 1024;
+  node.connect(gain).connect(meter).connect(out);
   let url: string | undefined;
   let wantPlay = false;
   let dead = false;
-  void getTrackBlob(track).then((blob) => {
-    if (!blob || dead) return;
-    url = URL.createObjectURL(blob);
-    audio.src = url;
-    if (wantPlay) tryPlay();
-  });
   const tryPlay = () => {
-    if (!audio.src) return;
-    audio.play().catch((err: DOMException) => {
+    if (!el.src) return;
+    el.play().catch((err: DOMException) => {
       if (err.name === 'NotAllowedError') blockedUntilGesture();
     });
   };
+  void getTrackBlob(track).then((blob) => {
+    if (!blob || dead) return;
+    url = URL.createObjectURL(blob);
+    el.src = url;
+    if (wantPlay) tryPlay();
+  });
   return {
-    volume: (v) => (audio.volume = Math.min(1, Math.max(0, v))),
+    meter,
+    setGain(g, smooth) {
+      const p = gain.gain;
+      p.cancelScheduledValues(c.currentTime);
+      if (smooth) p.setTargetAtTime(g, c.currentTime, FADE_S);
+      else p.setValueAtTime(g, c.currentTime);
+    },
     play() {
       wantPlay = true;
-      if (audio.paused) tryPlay();
+      if (el.paused) tryPlay();
     },
     pause() {
       wantPlay = false;
-      audio.pause();
+      el.pause();
     },
     destroy() {
       dead = true;
-      audio.pause();
-      audio.removeAttribute('src');
+      el.pause();
+      el.removeAttribute('src');
+      node.disconnect();
+      gain.disconnect();
+      meter.disconnect();
       if (url) URL.revokeObjectURL(url);
     },
   };
 }
 
-// --- YouTube (IFrame API, looped by hand: a single video does not loop on its own) ------------
+// --- YouTube (IFrame API). Its volume moves in coarse steps, so it is set once, never faded. ----
 
 interface YTPlayer {
   playVideo(): void;
@@ -123,10 +165,19 @@ function youTubeSource(track: AmbientTrack): Source {
   let player: YTPlayer | null = null;
   let ready = false;
   let wantPlay = false;
-  let vol = 0;
+  let channel = 0;
+  let sent = -1;
   let dead = false;
   const el = document.createElement('div');
   ytHost().append(el);
+  // The master fader applies too: YouTube does not go through the Web Audio graph.
+  const apply = () => {
+    if (!ready) return;
+    const v = Math.round(channel * masterGain() * 100);
+    if (v !== sent) player!.setVolume(v);
+    sent = v;
+  };
+  ytSources.add(apply);
   void loadYouTube()
     .then((YT) => {
       if (dead) return;
@@ -138,7 +189,7 @@ function youTubeSource(track: AmbientTrack): Source {
         events: {
           onReady() {
             ready = true;
-            player!.setVolume(Math.round(vol * 100));
+            apply();
             if (wantPlay) player!.playVideo();
           },
           onStateChange(e) {
@@ -152,9 +203,10 @@ function youTubeSource(track: AmbientTrack): Source {
     })
     .catch((err) => console.warn(err));
   return {
-    volume(v) {
-      vol = Math.min(1, Math.max(0, v));
-      if (ready) player!.setVolume(Math.round(vol * 100));
+    meter: null,
+    setGain(g) {
+      channel = g;
+      apply();
     },
     play() {
       wantPlay = true;
@@ -166,25 +218,28 @@ function youTubeSource(track: AmbientTrack): Source {
     },
     destroy() {
       dead = true;
+      ytSources.delete(apply);
       player?.destroy();
       el.remove();
     },
   };
 }
 
-// --- mixer ---------------------------------------------------------------------------------------
+const ytSources = new Set<() => void>();
+
+// --- voices --------------------------------------------------------------------------------------
 
 interface Voice {
+  key: string;
   slot: AmbientSlot;
   track: AmbientTrack;
   source: Source;
-  level: number; // fade gain
-  target: number;
-  playing: boolean;
+  active: boolean;
+  stopTimer?: ReturnType<typeof setTimeout>;
 }
 
-const voices: Voice[] = [];
-let timer: ReturnType<typeof setInterval> | undefined;
+const voices = new Map<string, Voice>();
+const keyOf = (slot: AmbientSlot, trackId: Id) => `${slot}:${trackId}`;
 let gestureHooked = false;
 
 /** Autoplay is refused until the GM clicks or presses a key: then everything resumes. */
@@ -197,79 +252,91 @@ function blockedUntilGesture() {
     useAmbient.setState({ blocked: false });
     window.removeEventListener('pointerdown', resume, true);
     window.removeEventListener('keydown', resume, true);
-    for (const v of voices) if (v.playing) v.source.play();
+    void ctx?.resume();
+    for (const v of voices.values()) if (v.active) v.source.play();
   };
   window.addEventListener('pointerdown', resume, true);
   window.addEventListener('keydown', resume, true);
 }
 
-function gain(v: Voice): number {
-  const a = getGm().settings.ambient;
-  return a.muted ? 0 : a.volume * v.track.volume * v.level;
-}
-
-function tick() {
-  const step = TICK_MS / FADE_MS;
-  for (const v of [...voices]) {
-    v.level = fadeStep(v.level, v.target, step);
-    v.source.volume(gain(v));
-    if (v.level === 0 && v.target === 0) {
-      const heard = useAmbient.getState().playing;
-      const waits =
-        (v.slot === 'global' && getGm().settings.ambient.globalTrackId === v.track.id) ||
-        (heard?.slot === v.slot && heard.trackId === v.track.id); // muted: resumes where it was
-      if (waits) {
-        // The global ambient waits, paused, for the scene track to end.
-        if (v.playing) v.source.pause();
-        v.playing = false;
-      } else {
-        v.source.destroy();
-        voices.splice(voices.indexOf(v), 1);
-      }
-    }
-  }
-  if (voices.every((v) => v.level === v.target)) {
-    clearInterval(timer);
-    timer = undefined;
-  }
-}
-
-function startFades() {
-  timer ??= setInterval(tick, TICK_MS);
-}
-
-/** Brings the voices in line with the scene, the global setting and the master volume. */
+/**
+ * Brings the voices in line with the mixer. Files fade in and out; YouTube switches at once
+ * (its stepwise volume made fades crackle). Paused globals keep their place; scene voices that
+ * are no longer wanted stop for good, so a scene's sound starts over when the scene opens again.
+ */
 function reconcile() {
   const s = getGm();
-  const a = s.settings.ambient;
-  const want = a.muted ? null : ambientTarget(activeScene(s)?.ambientTrackId, a.globalTrackId, s.tracks);
-  const heard = ambientTarget(activeScene(s)?.ambientTrackId, a.globalTrackId, s.tracks);
-  useAmbient.setState({ playing: heard });
-  for (const v of voices) {
-    const current = s.tracks[v.track.id];
-    if (current) v.track = current; // per-track volume and name
-    const keep = want && want.slot === v.slot && want.trackId === v.track.id;
-    v.target = keep ? 1 : 0;
-    if (!current) v.target = 0;
-  }
-  if (want && !voices.some((v) => v.slot === want.slot && v.track.id === want.trackId && v.target === 1)) {
-    const track = s.tracks[want.trackId];
-    const source = track.source === 'youtube' ? youTubeSource(track) : fileSource(track);
-    // A scene track starts from the beginning each time the scene opens.
-    voices.push({ slot: want.slot, track, source, level: 0, target: 1, playing: false });
-  }
-  for (const v of voices) {
-    if (v.target > 0 && !v.playing) {
-      v.source.volume(gain(v));
-      v.source.play();
-      v.playing = true;
+  const plan = mixPlan(globalChannels(s.settings.ambient), sceneAmbient(activeScene(s)), s.tracks);
+  const wanted = new Set<string>();
+  for (const p of plan) {
+    const key = keyOf(p.slot, p.trackId);
+    wanted.add(key);
+    let v = voices.get(key);
+    const track = s.tracks[p.trackId];
+    if (!v) {
+      if (!p.active) continue; // a muted global that never played yet
+      const source = track.source === 'youtube' ? youTubeSource(track) : fileSource(track);
+      v = { key, slot: p.slot, track, source, active: false };
+      voices.set(key, v);
     }
-    v.source.volume(gain(v));
+    v.track = track;
+    clearTimeout(v.stopTimer);
+    if (p.active) {
+      v.source.setGain(p.gain, true);
+      if (!v.active) v.source.play();
+      v.active = true;
+    } else if (v.active) {
+      v.active = false;
+      fadeOut(v, false);
+    }
   }
-  startFades();
+  for (const v of [...voices.values()]) {
+    if (!wanted.has(v.key)) {
+      v.active = false;
+      fadeOut(v, true);
+    }
+  }
+  if (master && ctx) master.gain.setTargetAtTime(masterGain(), ctx.currentTime, 0.05);
+  for (const apply of ytSources) apply();
 }
 
-/** Starts following the store: scene switches, the ambient settings and the track library. */
+function fadeOut(v: Voice, destroy: boolean) {
+  const youtube = v.track.source === 'youtube';
+  v.source.setGain(0, !youtube);
+  const stop = () => {
+    if (destroy) {
+      v.source.destroy();
+      voices.delete(v.key);
+    } else v.source.pause();
+  };
+  if (youtube) stop();
+  else v.stopTimer = setTimeout(stop, FADE_DONE_MS);
+}
+
+// --- meters --------------------------------------------------------------------------------------
+
+const buf = new Float32Array(1024);
+
+function peakDb(a: AnalyserNode | null | undefined): number | null {
+  if (!a) return null;
+  a.getFloatTimeDomainData(buf);
+  let peak = 0;
+  for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i]));
+  return peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+}
+
+/** Current peak of a channel in dB; null when it cannot be measured (YouTube, not playing). */
+export function channelLevel(slot: AmbientSlot, trackId: Id): number | null {
+  const v = voices.get(keyOf(slot, trackId));
+  return v?.active ? peakDb(v.source.meter) : null;
+}
+
+/** Peak of everything that goes through the master (audio files). */
+export function masterLevel(): number | null {
+  return peakDb(masterMeter);
+}
+
+/** Starts following the store: scene switches, the mixer settings and the track library. */
 export function initAmbient(): void {
   useGm.subscribe((s, prev) => {
     const scene = activeScene(s);
@@ -278,6 +345,7 @@ export function initAmbient(): void {
       s.settings.ambient !== prev.settings.ambient ||
       s.tracks !== prev.tracks ||
       s.activeSceneId !== prev.activeSceneId ||
+      scene?.ambient !== before?.ambient ||
       scene?.ambientTrackId !== before?.ambientTrackId
     ) {
       reconcile();

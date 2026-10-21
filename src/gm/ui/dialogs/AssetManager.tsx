@@ -1,4 +1,4 @@
-import { Castle, Plus, Trash2 } from 'lucide-react';
+import { Castle, Music, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ASSET_TYPES } from '../../../core/constants';
 import { tokenGrid } from '../../../core/geometry';
@@ -13,6 +13,7 @@ import { gmImages } from '../../images';
 import { ACCEPT_ATTR, isImageFile } from '../../importer';
 import { AssetTile, CollectionSelect, SceneTile, TYPE_ICONS } from '../Dock';
 import { VisualAlignButton } from '../VisualAlign';
+import { AmbientLibrary } from '../AmbientLibrary';
 import { Field, Modal, NumberInput, Segmented, Toggle } from '../common';
 import { FitPreview, GridFitFields, nudgeGrid } from '../GridFit';
 
@@ -145,8 +146,10 @@ function AssetEditor({ asset, onClose }: { asset: Asset; onClose: () => void }) 
   );
 }
 
-export function AssetManager({ tab: initialTab, assetId }: { tab?: DockTab; assetId?: Id }) {
-  const [tab, setTab] = useState<DockTab>(initialTab && initialTab !== 'search' ? initialTab : 'map');
+type ManagerTab = DockTab | 'ambient';
+
+export function AssetManager({ tab: initialTab, assetId }: { tab?: ManagerTab; assetId?: Id }) {
+  const [tab, setTab] = useState<ManagerTab>(initialTab && initialTab !== 'search' ? initialTab : 'map');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Id | null>(assetId ?? null);
   const assets = useGm((s) => s.assets);
@@ -172,7 +175,7 @@ export function AssetManager({ tab: initialTab, assetId }: { tab?: DockTab; asse
   }, [scenes, collectionId, query]);
 
   const asset = selected ? assets[selected] : undefined;
-  const assetType = tab !== 'scenes' && tab !== 'search' ? tab : undefined;
+  const assetType = tab !== 'scenes' && tab !== 'search' && tab !== 'ambient' ? tab : undefined;
 
   return (
     <Modal title={t.manager.title} onClose={close} wide className="asset-manager">
@@ -195,8 +198,12 @@ export function AssetManager({ tab: initialTab, assetId }: { tab?: DockTab; asse
               {TYPE_ICONS[x]} {t.assetTypes[x]}
             </button>
           ))}
+          <button type="button" className={tab === 'ambient' ? 'on' : ''} onClick={() => setTab('ambient')}>
+            <Music size={18} /> {t.ambient.tab}
+          </button>
         </nav>
-        <div className="am-main">
+        {tab === 'ambient' ? <AmbientLibrary /> : null}
+        <div className="am-main" hidden={tab === 'ambient'}>
           <div className="am-head">
             <CollectionSelect />
             <input
@@ -248,7 +255,7 @@ export function AssetManager({ tab: initialTab, assetId }: { tab?: DockTab; asse
             {tab !== 'scenes' && list.length === 0 ? <div className="tray-empty">{t.dock.empty}</div> : null}
           </div>
         </div>
-        {asset && tab !== 'scenes' ? (
+        {asset && tab !== 'scenes' && tab !== 'ambient' ? (
           <AssetEditor key={asset.id} asset={asset} onClose={() => setSelected(null)} />
         ) : null}
       </div>

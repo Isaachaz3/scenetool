@@ -103,7 +103,8 @@ export interface Scene {
   // screen sizes show the same area. Absent until the first Sync View.
   playerViewRef?: Size;
   thumbId?: Id;
-  ambientTrackId?: Id; // plays while the scene is open, over the global ambient
+  ambient?: SceneAmbient; // mixer channels of the scene
+  ambientTrackId?: Id; // before the mixer: one track over the global ambient
   updatedAt: number;
 }
 
@@ -117,15 +118,28 @@ export interface AmbientTrack {
   hash?: string; // file: SHA-256, for dedupe and the cloud path
   mime?: string;
   size?: number;
-  volume: number; // 0..1, evens out loud and quiet tracks
+  volume: number; // kept for old data; the mixer channels set the level
   createdAt: number;
   updatedAt: number;
 }
 
-export interface AmbientSettings {
-  globalTrackId: Id | null; // keeps playing across scenes
-  volume: number; // 0..1, master
+/** One mixer strip: a track with its fader (0..1, see faderToGain) and mute. */
+export interface AmbientChannel {
+  trackId: Id;
+  volume: number;
   muted: boolean;
+}
+
+export interface SceneAmbient {
+  channels: AmbientChannel[]; // play while the scene is open
+  muteGlobal: boolean; // the global channels pause in this scene
+}
+
+export interface AmbientSettings {
+  channels: AmbientChannel[]; // global: play in every scene
+  volume: number; // master fader, 0..1
+  muted: boolean;
+  globalTrackId?: Id | null; // before the mixer: one global track
 }
 
 export type Layer =

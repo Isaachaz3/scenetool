@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
-import { parseYouTubeId } from '../core/ambient';
+import { globalChannels, parseYouTubeId, sceneAmbient } from '../core/ambient';
 import { sha256Hex } from '../core/sha256';
-import type { AmbientSettings, AmbientTrack, Id } from '../core/types';
+import type { AmbientChannel, AmbientSettings, AmbientTrack, Id, SceneAmbient } from '../core/types';
 import { recordDeletion, remoteFiles } from '../cloud/remote';
 import { db } from '../db/db';
 import { updateSettings } from './assets';
@@ -104,13 +104,15 @@ export async function deleteTrack(id: Id, opts: { fromCloud?: boolean } = {}): P
   setGm((d) => {
     delete d.tracks[id];
     for (const sc of Object.values(d.scenes)) {
-      if (sc.ambientTrackId === id) {
-        delete sc.ambientTrackId;
-        sc.updatedAt = now;
-      }
+      const before = sceneAmbient(sc);
+      if (!before.channels.some((c) => c.trackId === id)) continue;
+      sc.ambient = { ...before, channels: before.channels.filter((c) => c.trackId !== id) };
+      delete sc.ambientTrackId;
+      sc.updatedAt = now;
     }
   });
-  if (getGm().settings.ambient.globalTrackId === id) await setAmbient({ globalTrackId: null });
+  const global = globalChannels(getGm().settings.ambient);
+  if (global.some((c) => c.trackId === id)) await setGlobalChannels(global.filter((c) => c.trackId !== id));
   await db.tracks.delete(id);
   if (track.blobId) await db.blobs.delete(track.blobId);
   if (!opts.fromCloud) {
@@ -122,13 +124,53 @@ export function setAmbient(patch: Partial<AmbientSettings>): Promise<void> {
   return updateSettings({ ambient: { ...getGm().settings.ambient, ...patch } });
 }
 
-/** Track that starts when the scene opens (null: the global ambient plays there). */
-export function setSceneAmbient(sceneId: Id, trackId: Id | null): void {
+// --- mixer channels ------------------------------------------------------------------------------
+
+const newChannel = (trackId: Id): AmbientChannel => ({ trackId, volume: 1, muted: false });
+
+function setGlobalChannels(channels: AmbientChannel[]): Promise<void> {
+  const { globalTrackId: _legacy, ...rest } = getGm().settings.ambient;
+  return updateSettings({ ambient: { ...rest, channels } });
+}
+
+/** Where a channel lives: the global strip set, or the scene's. */
+export type ChannelOwner = { scope: 'global' } | { scope: 'scene'; sceneId: Id };
+
+function setSceneAmbientData(sceneId: Id, next: (cur: SceneAmbient) => SceneAmbient): void {
   setGm((d) => {
     const sc = d.scenes[sceneId];
     if (!sc) return;
-    if (trackId) sc.ambientTrackId = trackId;
-    else delete sc.ambientTrackId;
+    sc.ambient = next(sceneAmbient(sc));
+    delete sc.ambientTrackId;
     sc.updatedAt = Date.now();
   });
+}
+
+function editChannels(owner: ChannelOwner, fn: (list: AmbientChannel[]) => AmbientChannel[]): void {
+  if (owner.scope === 'global') void setGlobalChannels(fn(globalChannels(getGm().settings.ambient)));
+  else setSceneAmbientData(owner.sceneId, (cur) => ({ ...cur, channels: fn(cur.channels) }));
+}
+
+/** Adds a strip for the track (once per owner). */
+export function addChannel(owner: ChannelOwner, trackId: Id): void {
+  editChannels(owner, (list) =>
+    list.some((c) => c.trackId === trackId) ? list : [...list, newChannel(trackId)],
+  );
+}
+
+export function updateChannel(
+  owner: ChannelOwner,
+  trackId: Id,
+  patch: Partial<Omit<AmbientChannel, 'trackId'>>,
+): void {
+  editChannels(owner, (list) => list.map((c) => (c.trackId === trackId ? { ...c, ...patch } : c)));
+}
+
+export function removeChannel(owner: ChannelOwner, trackId: Id): void {
+  editChannels(owner, (list) => list.filter((c) => c.trackId !== trackId));
+}
+
+/** Whether the global channels pause while this scene is open. */
+export function setSceneMuteGlobal(sceneId: Id, muteGlobal: boolean): void {
+  setSceneAmbientData(sceneId, (cur) => ({ ...cur, muteGlobal }));
 }
