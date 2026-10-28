@@ -1522,25 +1522,46 @@ kbd {
 }
 
 /* YouTube players of the ambient sound: kept out of sight. */
+/* On screen but invisible under the interface: offscreen players may count as hidden. */
 #yt-ambient {
   position: fixed;
-  left: -10000px;
-  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: -1;
   width: 200px;
   height: 200px;
   overflow: hidden;
+  opacity: 0;
   pointer-events: none;
+}
+
+#yt-ambient .yt-hint {
+  display: none;
+}
+
+#yt-ambient.visible .yt-hint {
+  display: block;
+  flex-basis: 100%;
+  max-width: 660px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text, #f4f4f8);
+  font-size: 13px;
 }
 
 /* Shown on request: the players in the top-left corner, clickable. */
 #yt-ambient.visible {
   left: 16px;
   top: 16px;
+  bottom: auto;
+  opacity: 1;
   z-index: 95;
   width: auto;
   height: auto;
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 8px;
   max-width: calc(100vw - 120px);
   pointer-events: auto;

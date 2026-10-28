@@ -91,12 +91,15 @@ function Strip({
   const read = useRef(() => channelLevel(slot, track.id)).current;
   const problem = useAmbient((s) => s.errors[track.id]);
   const ytState = useAmbient((s) => s.ytStates[track.id]);
+  const waits = useAmbient((s) => !!s.needsClick[track.id]);
   const status =
     track.source !== 'youtube'
       ? undefined
-      : ytState === undefined
-        ? t.ambient.ytLoading
-        : t.ambient.ytState[youTubeStateName(ytState)];
+      : waits
+        ? `YouTube: ${t.ambient.waitsClick}`
+        : ytState === undefined
+          ? t.ambient.ytLoading
+          : t.ambient.ytState[youTubeStateName(ytState)];
   return (
     <div
       className={'strip ' + slot + (problem ? ' broken' : '')}

@@ -11,6 +11,7 @@ import {
 import type { AmbientTrack, Id } from '../core/types';
 import { activeScene, getGm, useGm } from '../state/store';
 import { getTrackBlob } from '../state/tracks';
+import { t } from '../i18n/ru';
 
 const FADE_S = 0.5; // time constant of file fades (about 1.5 s to silence)
 const FADE_DONE_MS = 1800;
@@ -22,18 +23,46 @@ export const useAmbient = create<{
   errors: Record<Id, YouTubeProblem>;
   ytStates: Record<Id, number>; // YouTube player state per track, shown on the strips
   showPlayers: boolean; // the YouTube players are visible in a corner
+  needsClick: Record<Id, true>; // YouTube refused to start these: play must be pressed in the player
 }>(() => ({
   blocked: false,
   errors: {},
   ytStates: {},
   showPlayers: false,
+  needsClick: {},
 }));
+
+let autoShown = false; // the players were shown because YouTube asked for a click
+
+function showPlayers(show: boolean) {
+  useAmbient.setState({ showPlayers: show });
+  ytHost().classList.toggle('visible', show);
+}
 
 /** Makes the hidden YouTube players visible, to see what YouTube says and press play there. */
 export function toggleYouTubePlayers(): void {
-  const show = !useAmbient.getState().showPlayers;
-  useAmbient.setState({ showPlayers: show });
-  ytHost().classList.toggle('visible', show);
+  autoShown = false;
+  showPlayers(!useAmbient.getState().showPlayers);
+}
+
+/**
+ * YouTube may refuse to start a video from the page even after a click on the page; a click on
+ * play inside its player always works, and from then on that player obeys the page. So the
+ * players show up by themselves while one of them waits for that click, and hide again after.
+ */
+function setNeedsClick(trackId: Id, need: boolean) {
+  const needsClick = { ...useAmbient.getState().needsClick };
+  if (need) needsClick[trackId] = true;
+  else delete needsClick[trackId];
+  useAmbient.setState({ needsClick });
+  const waiting = Object.keys(needsClick).length > 0;
+  if (waiting && !useAmbient.getState().showPlayers) {
+    autoShown = true;
+    showPlayers(true);
+  } else if (!waiting && autoShown) {
+    autoShown = false;
+    showPlayers(false);
+  }
 }
 
 function setYtState(trackId: Id, state: number | null) {
@@ -83,6 +112,7 @@ interface Source {
   setGain(g: number, smooth: boolean): void; // channel gain × active, before the master
   play(): void;
   pause(): void;
+  rewind?(): void;
   destroy(): void;
   meter: AnalyserNode | null; // files only: YouTube audio cannot be measured
 }
@@ -196,6 +226,10 @@ function ytHost(): HTMLElement {
     host = document.createElement('div');
     host.id = YT_HOST_ID;
     host.setAttribute('aria-hidden', 'true');
+    const hint = document.createElement('div');
+    hint.className = 'yt-hint';
+    hint.textContent = t.ambient.pressPlay;
+    host.append(hint);
     document.body.append(host);
   }
   return host;
@@ -252,7 +286,10 @@ function youTubeSource(track: AmbientTrack): Source {
     check = setTimeout(() => {
       if (dead || failed || !wantPlay) return;
       const s = player!.getPlayerState();
-      if (s !== PLAYING && s !== BUFFERING) blockedUntilGesture();
+      if (s === PLAYING || s === BUFFERING) return;
+      // Before any click on the page, wait for one; after it, YouTube wants a click in the player.
+      if (navigator.userActivation?.hasBeenActive === false) blockedUntilGesture();
+      else setNeedsClick(track.id, true);
     }, START_CHECK_MS);
   };
   // The master fader applies too: YouTube does not go through the Web Audio graph.
@@ -277,6 +314,7 @@ function youTubeSource(track: AmbientTrack): Source {
             setYtState(track.id, e.data);
             if (e.data === PLAYING) {
               setProblem(track.id, null);
+              setNeedsClick(track.id, false);
               if (unmuteWanted) {
                 unmuteWanted = false;
                 player!.unMute();
@@ -317,10 +355,14 @@ function youTubeSource(track: AmbientTrack): Source {
       clearTimeout(check);
       if (ready) player!.pauseVideo();
     },
+    rewind() {
+      if (ready) player!.seekTo(0, true);
+    },
     destroy() {
       dead = true;
       clearTimeout(check);
       setYtState(track.id, null);
+      setNeedsClick(track.id, false);
       ytSources.delete(apply);
       player?.destroy();
       el.remove();
@@ -378,7 +420,7 @@ function reconcile() {
     const track = s.tracks[p.trackId];
     if (!v) {
       if (!p.active) continue; // a muted global that never played yet
-      const source = track.source === 'youtube' ? youTubeSource(track) : fileSource(track);
+      const source = track.source === 'youtube' ? takeYouTube(track) : fileSource(track);
       v = { key, slot: p.slot, track, source, active: false };
       voices.set(key, v);
     }
@@ -401,6 +443,41 @@ function reconcile() {
   }
   if (master && ctx) master.gain.setTargetAtTime(masterGain(), ctx.currentTime, 0.05);
   for (const apply of ytSources) apply();
+  // Players of deleted tracks go for good.
+  for (const [id, list] of ytCache) {
+    if (s.tracks[id]) continue;
+    for (const c of list) if (!c.busy) c.source.destroy();
+    const left = list.filter((c) => c.busy);
+    if (left.length) ytCache.set(id, left);
+    else ytCache.delete(id);
+  }
+}
+
+/**
+ * YouTube players live for the whole session: a player that once got its click keeps obeying
+ * the page, so a scene's video is paused and rewound when the scene closes, not destroyed.
+ */
+const ytCache = new Map<Id, { source: Source; busy: boolean }[]>();
+
+function takeYouTube(track: AmbientTrack): Source {
+  const list = ytCache.get(track.id) ?? [];
+  const free = list.find((c) => !c.busy);
+  if (free) {
+    free.busy = true;
+    return free.source;
+  }
+  const source = youTubeSource(track);
+  list.push({ source, busy: true });
+  ytCache.set(track.id, list);
+  return source;
+}
+
+function releaseYouTube(trackId: Id, source: Source) {
+  source.pause();
+  source.rewind?.();
+  const entry = ytCache.get(trackId)?.find((c) => c.source === source);
+  if (entry) entry.busy = false;
+  else source.destroy();
 }
 
 function fadeOut(v: Voice, destroy: boolean) {
@@ -408,8 +485,9 @@ function fadeOut(v: Voice, destroy: boolean) {
   v.source.setGain(0, !youtube);
   const stop = () => {
     if (destroy) {
-      v.source.destroy();
       voices.delete(v.key);
+      if (youtube) releaseYouTube(v.track.id, v.source);
+      else v.source.destroy();
     } else v.source.pause();
   };
   if (youtube) stop();

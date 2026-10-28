@@ -176,6 +176,9 @@ export const ru = {
       cued: 'YouTube: готов',
     },
     ytLoading: 'YouTube: плеер загружается',
+    pressPlay:
+      'YouTube не даёт сайту включить звук сам: нажмите ▶ в плеере. Один раз за сеанс на каждый ролик, дальше всё переключается само.',
+    waitsClick: 'ждёт ▶',
     showPlayers: 'Показать плееры YouTube',
     hidePlayers: 'Скрыть плееры YouTube',
     showPlayersHint:
