@@ -1,4 +1,16 @@
-import { AlertTriangle, Library, Music, Pause, Play, Plus, Volume2, VolumeX, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Library,
+  Music,
+  Pause,
+  Play,
+  Plus,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
   dbToMeter,
@@ -6,6 +18,7 @@ import {
   formatDb,
   globalChannels,
   sceneAmbient,
+  youTubeStateName,
   type AmbientSlot,
 } from '../../core/ambient';
 import type { AmbientChannel, AmbientTrack, Id } from '../../core/types';
@@ -20,7 +33,7 @@ import {
   type ChannelOwner,
 } from '../../state/tracks';
 import { openDialog } from '../../state/ui';
-import { channelLevel, masterLevel, useAmbient } from '../ambient';
+import { channelLevel, masterLevel, toggleYouTubePlayers, useAmbient } from '../ambient';
 import { useClickOutside } from './common';
 
 const DECAY_DB_PER_FRAME = 1.2;
@@ -77,15 +90,23 @@ function Strip({
 }) {
   const read = useRef(() => channelLevel(slot, track.id)).current;
   const problem = useAmbient((s) => s.errors[track.id]);
+  const ytState = useAmbient((s) => s.ytStates[track.id]);
+  const status =
+    track.source !== 'youtube'
+      ? undefined
+      : ytState === undefined
+        ? t.ambient.ytLoading
+        : t.ambient.ytState[youTubeStateName(ytState)];
   return (
     <div
       className={'strip ' + slot + (problem ? ' broken' : '')}
       title={problem ? t.ambient.problems[problem] : undefined}
     >
       <div className="strip-badge">{slot === 'global' ? t.ambient.globalBadge : t.ambient.sceneBadge}</div>
-      <div className="strip-name" title={track.name}>
+      <div className="strip-name" title={status ? `${track.name}\n${status}` : track.name}>
         {track.name}
       </div>
+      {status ? <div className="strip-status">{status.replace('YouTube: ', '')}</div> : null}
       <div className="strip-db">
         {problem ? <AlertTriangle size={12} className="strip-warn" /> : null}
         {formatDb(faderToDb(channel.volume))}
@@ -151,17 +172,30 @@ function Mixer() {
   const trackMap = useGm((s) => s.tracks);
   const scene = useGm((s) => activeScene(s));
   const blocked = useAmbient((s) => s.blocked);
+  const showPlayers = useAmbient((s) => s.showPlayers);
   const tracks = Object.values(trackMap).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const global = globalChannels(ambient).filter((c) => trackMap[c.trackId]);
   const sa = sceneAmbient(scene);
   const sceneChannels = sa.channels.filter((c) => trackMap[c.trackId]);
   const readMaster = useRef(masterLevel).current;
+  const hasYouTube = [...global, ...sceneChannels].some((c) => trackMap[c.trackId]?.source === 'youtube');
   const globalOwner: ChannelOwner = { scope: 'global' };
 
   return (
     <div className="panel mixer">
       <div className="mixer-head">
         <h4>{t.ambient.mixer}</h4>
+        {hasYouTube ? (
+          <button
+            type="button"
+            className="btn"
+            title={t.ambient.showPlayersHint}
+            onClick={toggleYouTubePlayers}
+          >
+            {showPlayers ? <EyeOff size={16} /> : <Eye size={16} />}{' '}
+            {showPlayers ? t.ambient.hidePlayers : t.ambient.showPlayers}
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn"

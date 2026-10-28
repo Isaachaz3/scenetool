@@ -1532,6 +1532,28 @@ kbd {
   pointer-events: none;
 }
 
+/* Shown on request: the players in the top-left corner, clickable. */
+#yt-ambient.visible {
+  left: 16px;
+  top: 16px;
+  z-index: 95;
+  width: auto;
+  height: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: calc(100vw - 120px);
+  pointer-events: auto;
+}
+
+#yt-ambient.visible iframe {
+  width: 320px;
+  height: 180px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: #000;
+}
+
 /* --- ambient mixer ------------------------------------------------------------------------- */
 
 .ambient-wrap {
@@ -1827,4 +1849,22 @@ kbd {
 .lib-problem {
   font-size: 12px;
   white-space: normal;
+}
+
+.strip-status {
+  font-size: 10px;
+  color: var(--muted);
+  max-width: 70px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mixer-head {
+  gap: 8px;
+}
+
+.mixer-head h4 {
+  margin-right: auto;
 }

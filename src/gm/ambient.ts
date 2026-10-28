@@ -17,10 +17,31 @@ const FADE_DONE_MS = 1800;
 const YT_HOST_ID = 'yt-ambient';
 
 /** Whether the browser still waits for a click before it lets sound play. */
-export const useAmbient = create<{ blocked: boolean; errors: Record<Id, YouTubeProblem> }>(() => ({
+export const useAmbient = create<{
+  blocked: boolean;
+  errors: Record<Id, YouTubeProblem>;
+  ytStates: Record<Id, number>; // YouTube player state per track, shown on the strips
+  showPlayers: boolean; // the YouTube players are visible in a corner
+}>(() => ({
   blocked: false,
   errors: {},
+  ytStates: {},
+  showPlayers: false,
 }));
+
+/** Makes the hidden YouTube players visible, to see what YouTube says and press play there. */
+export function toggleYouTubePlayers(): void {
+  const show = !useAmbient.getState().showPlayers;
+  useAmbient.setState({ showPlayers: show });
+  ytHost().classList.toggle('visible', show);
+}
+
+function setYtState(trackId: Id, state: number | null) {
+  const ytStates = { ...useAmbient.getState().ytStates };
+  if (state === null) delete ytStates[trackId];
+  else ytStates[trackId] = state;
+  useAmbient.setState({ ytStates });
+}
 
 function setProblem(trackId: Id, problem: YouTubeProblem | null) {
   const errors = { ...useAmbient.getState().errors };
@@ -124,6 +145,9 @@ function fileSource(track: AmbientTrack): Source {
 
 interface YTPlayer {
   playVideo(): void;
+  mute(): void;
+  unMute(): void;
+  isMuted(): boolean;
   pauseVideo(): void;
   seekTo(s: number, allowSeekAhead: boolean): void;
   setVolume(v: number): void;
@@ -210,10 +234,20 @@ function youTubeSource(track: AmbientTrack): Source {
    * playVideo() fails silently when the browser refuses sound before the first click: if the
    * video has not started after a few seconds, wait for a click and try again.
    */
+  /**
+   * Browsers always allow muted autoplay: start muted, then unmute once it plays (allowed after
+   * a click on the page). If unmuting is refused the video pauses, and the check below waits
+   * for a click.
+   */
+  let unmuteWanted = false;
   const start = () => {
     if (!ready || failed || dead) return;
     const state = player!.getPlayerState();
-    if (state !== PLAYING) player!.playVideo();
+    if (state !== PLAYING) {
+      unmuteWanted = true;
+      player!.mute();
+      player!.playVideo();
+    } else if (player!.isMuted()) player!.unMute();
     clearTimeout(check);
     check = setTimeout(() => {
       if (dead || failed || !wantPlay) return;
@@ -240,7 +274,16 @@ function youTubeSource(track: AmbientTrack): Source {
             if (wantPlay) start();
           },
           onStateChange(e) {
-            if (e.data === PLAYING) setProblem(track.id, null);
+            setYtState(track.id, e.data);
+            if (e.data === PLAYING) {
+              setProblem(track.id, null);
+              if (unmuteWanted) {
+                unmuteWanted = false;
+                player!.unMute();
+                sent = -1;
+                apply();
+              }
+            }
             if (e.data === ENDED) {
               player!.seekTo(0, true);
               player!.playVideo();
@@ -277,6 +320,7 @@ function youTubeSource(track: AmbientTrack): Source {
     destroy() {
       dead = true;
       clearTimeout(check);
+      setYtState(track.id, null);
       ytSources.delete(apply);
       player?.destroy();
       el.remove();

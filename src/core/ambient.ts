@@ -89,6 +89,13 @@ export function mixPlan(
   ];
 }
 
+/** Words for a YouTube player state (IFrame API numbers). */
+export type YouTubeStateName = 'unstarted' | 'ended' | 'playing' | 'paused' | 'buffering' | 'cued';
+
+export function youTubeStateName(state: number): YouTubeStateName {
+  return (['ended', 'playing', 'paused', 'buffering', 'unstarted', 'cued'] as const)[state] ?? 'unstarted';
+}
+
 /** Why a YouTube video cannot play here, from the IFrame API error code. */
 export type YouTubeProblem = 'embed' | 'missing' | 'broken' | 'unavailable';
 
