@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  youTubeProblem,
   dbToMeter,
   faderToDb,
   faderToGain,
@@ -81,5 +82,13 @@ describe('ambient', () => {
     expect(globalChannels({ globalTrackId: 'a', volume: 1, muted: false } as never)).toEqual([ch('a')]);
     expect(sceneAmbient({ ambientTrackId: 'b' } as Scene)).toEqual({ channels: [ch('b')], muteGlobal: true });
     expect(sceneAmbient(null)).toEqual({ channels: [], muteGlobal: true });
+  });
+
+  it('explains YouTube player errors', () => {
+    expect(youTubeProblem(150)).toBe('embed');
+    expect(youTubeProblem(101)).toBe('embed');
+    expect(youTubeProblem(100)).toBe('missing');
+    expect(youTubeProblem(2)).toBe('broken');
+    expect(youTubeProblem(5)).toBe('unavailable');
   });
 });

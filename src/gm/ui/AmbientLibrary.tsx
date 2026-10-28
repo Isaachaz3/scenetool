@@ -1,4 +1,4 @@
-import { Music, Pencil, Plus, Trash2, Upload, Youtube } from 'lucide-react';
+import { AlertTriangle, Music, Pencil, Plus, Trash2, Upload, Youtube } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { globalChannels, sceneAmbient } from '../../core/ambient';
 import type { AmbientTrack } from '../../core/types';
@@ -13,6 +13,7 @@ import {
   updateTrack,
 } from '../../state/tracks';
 import { confirmDialog, promptDialog, toast } from '../../state/ui';
+import { useAmbient } from '../ambient';
 
 export const AUDIO_ACCEPT = 'audio/*,.mp3,.ogg,.wav,.m4a,.flac';
 
@@ -48,6 +49,7 @@ function useUsage(track: AmbientTrack) {
 function Row({ track, query }: { track: AmbientTrack; query: string }) {
   const { global, scenes } = useUsage(track);
   const scene = useGm((s) => activeScene(s));
+  const problem = useAmbient((s) => s.errors[track.id]);
   const inScene = !!scene && sceneAmbient(scene).channels.some((c) => c.trackId === track.id);
   if (query && !track.name.toLowerCase().includes(query)) return null;
   const usage = [global ? t.ambient.usedGlobal : '', scenes].filter(Boolean);
@@ -71,6 +73,11 @@ function Row({ track, query }: { track: AmbientTrack; query: string }) {
           {' · '}
           {usage.length ? t.ambient.usedIn(usage.join(', ')) : t.ambient.unused}
         </span>
+        {problem ? (
+          <span className="warn lib-problem">
+            <AlertTriangle size={12} /> {t.ambient.problems[problem]}
+          </span>
+        ) : null}
       </div>
       <button
         type="button"

@@ -1,4 +1,4 @@
-import { Library, Music, Pause, Play, Plus, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertTriangle, Library, Music, Pause, Play, Plus, Volume2, VolumeX, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
   dbToMeter,
@@ -76,13 +76,20 @@ function Strip({
   track: AmbientTrack;
 }) {
   const read = useRef(() => channelLevel(slot, track.id)).current;
+  const problem = useAmbient((s) => s.errors[track.id]);
   return (
-    <div className={'strip ' + slot}>
+    <div
+      className={'strip ' + slot + (problem ? ' broken' : '')}
+      title={problem ? t.ambient.problems[problem] : undefined}
+    >
       <div className="strip-badge">{slot === 'global' ? t.ambient.globalBadge : t.ambient.sceneBadge}</div>
       <div className="strip-name" title={track.name}>
         {track.name}
       </div>
-      <div className="strip-db">{formatDb(faderToDb(channel.volume))}</div>
+      <div className="strip-db">
+        {problem ? <AlertTriangle size={12} className="strip-warn" /> : null}
+        {formatDb(faderToDb(channel.volume))}
+      </div>
       <div className="strip-body">
         <Fader
           value={channel.volume}

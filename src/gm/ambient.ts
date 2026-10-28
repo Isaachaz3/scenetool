@@ -1,5 +1,13 @@
 import { create } from 'zustand';
-import { faderToGain, globalChannels, mixPlan, sceneAmbient, type AmbientSlot } from '../core/ambient';
+import {
+  faderToGain,
+  globalChannels,
+  mixPlan,
+  sceneAmbient,
+  youTubeProblem,
+  type AmbientSlot,
+  type YouTubeProblem,
+} from '../core/ambient';
 import type { AmbientTrack, Id } from '../core/types';
 import { activeScene, getGm, useGm } from '../state/store';
 import { getTrackBlob } from '../state/tracks';
@@ -9,7 +17,17 @@ const FADE_DONE_MS = 1800;
 const YT_HOST_ID = 'yt-ambient';
 
 /** Whether the browser still waits for a click before it lets sound play. */
-export const useAmbient = create<{ blocked: boolean }>(() => ({ blocked: false }));
+export const useAmbient = create<{ blocked: boolean; errors: Record<Id, YouTubeProblem> }>(() => ({
+  blocked: false,
+  errors: {},
+}));
+
+function setProblem(trackId: Id, problem: YouTubeProblem | null) {
+  const errors = { ...useAmbient.getState().errors };
+  if (problem) errors[trackId] = problem;
+  else delete errors[trackId];
+  useAmbient.setState({ errors });
+}
 
 // --- Web Audio graph: file channels → their gain → analyser → master gain → analyser → out ------
 
@@ -116,11 +134,11 @@ interface YTNamespace {
   Player: new (
     el: HTMLElement,
     opts: {
-      videoId: string;
-      width: number;
-      height: number;
-      playerVars: Record<string, number | string>;
-      events: { onReady?: () => void; onStateChange?: (e: { data: number }) => void };
+      events: {
+        onReady?: () => void;
+        onStateChange?: (e: { data: number }) => void;
+        onError?: (e: { data: number }) => void;
+      };
     },
   ) => YTPlayer;
 }
@@ -162,14 +180,47 @@ function ytHost(): HTMLElement {
 function youTubeSource(track: AmbientTrack): Source {
   const ENDED = 0;
   const PLAYING = 1;
+  const BUFFERING = 3;
+  const START_CHECK_MS = 3000;
   let player: YTPlayer | null = null;
   let ready = false;
   let wantPlay = false;
   let channel = 0;
   let sent = -1;
   let dead = false;
-  const el = document.createElement('div');
+  let failed = false;
+  let check: ReturnType<typeof setTimeout> | undefined;
+  // Our own iframe, so that it is allowed to play sound on its own (allow="autoplay").
+  const el = document.createElement('iframe');
+  const params = new URLSearchParams({
+    enablejsapi: '1',
+    controls: '0',
+    disablekb: '1',
+    playsinline: '1',
+    rel: '0',
+    origin: location.origin,
+  });
+  el.src = `https://www.youtube.com/embed/${encodeURIComponent(track.youtubeId!)}?${params}`;
+  el.allow = 'autoplay; encrypted-media';
+  el.width = '200';
+  el.height = '200';
+  el.title = track.name;
   ytHost().append(el);
+  /**
+   * playVideo() fails silently when the browser refuses sound before the first click: if the
+   * video has not started after a few seconds, wait for a click and try again.
+   */
+  const start = () => {
+    if (!ready || failed || dead) return;
+    const state = player!.getPlayerState();
+    if (state !== PLAYING) player!.playVideo();
+    clearTimeout(check);
+    check = setTimeout(() => {
+      if (dead || failed || !wantPlay) return;
+      const s = player!.getPlayerState();
+      if (s !== PLAYING && s !== BUFFERING) blockedUntilGesture();
+    }, START_CHECK_MS);
+  };
   // The master fader applies too: YouTube does not go through the Web Audio graph.
   const apply = () => {
     if (!ready) return;
@@ -182,26 +233,32 @@ function youTubeSource(track: AmbientTrack): Source {
     .then((YT) => {
       if (dead) return;
       player = new YT.Player(el, {
-        videoId: track.youtubeId!,
-        width: 200,
-        height: 200,
-        playerVars: { autoplay: 0, controls: 0, disablekb: 1, playsinline: 1, rel: 0 },
         events: {
           onReady() {
             ready = true;
             apply();
-            if (wantPlay) player!.playVideo();
+            if (wantPlay) start();
           },
           onStateChange(e) {
+            if (e.data === PLAYING) setProblem(track.id, null);
             if (e.data === ENDED) {
               player!.seekTo(0, true);
               player!.playVideo();
             }
           },
+          onError(e) {
+            failed = true;
+            clearTimeout(check);
+            console.warn('YouTube error', e.data, track.youtubeId);
+            setProblem(track.id, youTubeProblem(e.data));
+          },
         },
       });
     })
-    .catch((err) => console.warn(err));
+    .catch((err) => {
+      console.warn(err);
+      setProblem(track.id, 'unavailable'); // the YouTube script did not load
+    });
   return {
     meter: null,
     setGain(g) {
@@ -210,14 +267,16 @@ function youTubeSource(track: AmbientTrack): Source {
     },
     play() {
       wantPlay = true;
-      if (ready && player!.getPlayerState() !== PLAYING) player!.playVideo();
+      start();
     },
     pause() {
       wantPlay = false;
+      clearTimeout(check);
       if (ready) player!.pauseVideo();
     },
     destroy() {
       dead = true;
+      clearTimeout(check);
       ytSources.delete(apply);
       player?.destroy();
       el.remove();

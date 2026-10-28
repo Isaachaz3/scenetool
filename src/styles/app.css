@@ -1813,3 +1813,18 @@ kbd {
 .am-main[hidden] {
   display: none;
 }
+
+.strip.broken {
+  border-color: var(--danger);
+}
+
+.strip-warn {
+  color: var(--danger);
+  vertical-align: -1px;
+  margin-right: 2px;
+}
+
+.lib-problem {
+  font-size: 12px;
+  white-space: normal;
+}

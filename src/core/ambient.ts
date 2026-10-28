@@ -88,3 +88,13 @@ export function mixPlan(
     ...sceneOn.map((c) => ({ slot: 'scene' as const, trackId: c.trackId, active: true, gain: gain(c) })),
   ];
 }
+
+/** Why a YouTube video cannot play here, from the IFrame API error code. */
+export type YouTubeProblem = 'embed' | 'missing' | 'broken' | 'unavailable';
+
+export function youTubeProblem(code: number): YouTubeProblem {
+  if (code === 101 || code === 150 || code === 153) return 'embed'; // the owner forbids embedding
+  if (code === 100) return 'missing'; // removed or private
+  if (code === 2) return 'broken'; // bad video id
+  return 'unavailable'; // 5: the HTML5 player failed
+}
