@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   youTubeProblem,
+  fadeAt,
   dbToMeter,
   faderToDb,
   faderToGain,
@@ -63,8 +64,8 @@ describe('ambient', () => {
     const global = [ch('rain', 1), ch('tavern', 0.9, true)];
     // A scene without channels: globals play.
     expect(mixPlan(global, { channels: [], muteGlobal: true }, tracks)).toEqual([
-      { slot: 'global', trackId: 'rain', active: true, gain: 1 },
-      { slot: 'global', trackId: 'tavern', active: true, gain: 0 },
+      { slot: 'global', trackId: 'rain', active: true, gain: 1, muted: false },
+      { slot: 'global', trackId: 'tavern', active: true, gain: 0, muted: true },
     ]);
     // Battle replaces the globals...
     const battle = mixPlan(global, { channels: [ch('battle')], muteGlobal: true }, tracks);
@@ -90,5 +91,15 @@ describe('ambient', () => {
     expect(youTubeProblem(100)).toBe('missing');
     expect(youTubeProblem(2)).toBe('broken');
     expect(youTubeProblem(5)).toBe('unavailable');
+  });
+
+  it('fades evenly in dB and lands exactly', () => {
+    // 0 dB → silence (−60 dB) in 5 s: −30 dB half way, −12 dB after one second.
+    expect(20 * Math.log10(fadeAt(1, 0, 2.5, 5))).toBeCloseTo(-30);
+    expect(20 * Math.log10(fadeAt(1, 0, 1, 5))).toBeCloseTo(-12);
+    expect(fadeAt(0, 1, 2.5, 5)).toBeCloseTo(10 ** (-30 / 20));
+    expect(fadeAt(0.2, 0.8, 0, 5)).toBeCloseTo(0.2);
+    expect(fadeAt(1, 0, 7, 5)).toBe(0);
+    expect(fadeAt(1, 0, 0, 0)).toBe(0);
   });
 });

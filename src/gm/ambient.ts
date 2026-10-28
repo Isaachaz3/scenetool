@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import {
+  FADE,
+  fadeAt,
   faderToGain,
   globalChannels,
   mixPlan,
@@ -13,8 +15,8 @@ import { activeScene, getGm, useGm } from '../state/store';
 import { getTrackBlob } from '../state/tracks';
 import { t } from '../i18n/ru';
 
-const FADE_S = 0.5; // time constant of file fades (about 1.5 s to silence)
-const FADE_DONE_MS = 1800;
+const FADE_DONE_MS = FADE.scene * 1000 + 300;
+const YT_STEP_MS = 100;
 const YT_HOST_ID = 'yt-ambient';
 
 /** Whether the browser still waits for a click before it lets sound play. */
@@ -51,12 +53,16 @@ export function toggleYouTubePlayers(): void {
  * players show up by themselves while one of them waits for that click, and hide again after.
  */
 function setNeedsClick(trackId: Id, need: boolean) {
-  const needsClick = { ...useAmbient.getState().needsClick };
+  const before = useAmbient.getState().needsClick;
+  const isNew = need && !before[trackId];
+  const needsClick = { ...before };
   if (need) needsClick[trackId] = true;
   else delete needsClick[trackId];
   useAmbient.setState({ needsClick });
   const waiting = Object.keys(needsClick).length > 0;
-  if (waiting && !useAmbient.getState().showPlayers) {
+  // Only a video that starts waiting shows the players: the GM may have hidden them on purpose,
+  // and the click on "hide" itself makes the waiting videos try (and fail) again.
+  if (isNew && !useAmbient.getState().showPlayers) {
     autoShown = true;
     showPlayers(true);
   } else if (!waiting && autoShown) {
@@ -109,7 +115,7 @@ function masterGain(): number {
 }
 
 interface Source {
-  setGain(g: number, smooth: boolean): void; // channel gain × active, before the master
+  setGain(g: number, fade: number): void; // channel gain × active, before the master; fade in s
   play(): void;
   pause(): void;
   rewind?(): void;
@@ -145,11 +151,8 @@ function fileSource(track: AmbientTrack): Source {
   });
   return {
     meter,
-    setGain(g, smooth) {
-      const p = gain.gain;
-      p.cancelScheduledValues(c.currentTime);
-      if (smooth) p.setTargetAtTime(g, c.currentTime, FADE_S);
-      else p.setValueAtTime(g, c.currentTime);
+    setGain(g, fade) {
+      rampParam(c, gain.gain, g, fade);
     },
     play() {
       wantPlay = true;
@@ -292,12 +295,37 @@ function youTubeSource(track: AmbientTrack): Source {
       else setNeedsClick(track.id, true);
     }, START_CHECK_MS);
   };
-  // The master fader applies too: YouTube does not go through the Web Audio graph.
-  const apply = () => {
+  /**
+   * Volume = channel × master (YouTube is outside the Web Audio graph). Long fades go in 1 %
+   * steps every 100 ms: slow enough not to crackle, unlike the fast fades of before.
+   */
+  let shown = 0; // volume the player has now, 0..1
+  let fadeTimer: ReturnType<typeof setInterval> | undefined;
+  const send = (v: number) => {
+    shown = v;
+    const n = Math.round(v * 100);
+    if (n !== sent) player!.setVolume(n);
+    sent = n;
+  };
+  const apply = (fade = 0) => {
     if (!ready) return;
-    const v = Math.round(channel * masterGain() * 100);
-    if (v !== sent) player!.setVolume(v);
-    sent = v;
+    const target = channel * masterGain();
+    clearInterval(fadeTimer);
+    fadeTimer = undefined;
+    if (fade <= 0 || Math.abs(target - shown) < 0.005) {
+      send(target);
+      return;
+    }
+    const from = shown;
+    const t0 = performance.now();
+    fadeTimer = setInterval(() => {
+      const elapsed = (performance.now() - t0) / 1000;
+      send(fadeAt(from, target, elapsed, fade));
+      if (elapsed >= fade) {
+        clearInterval(fadeTimer);
+        fadeTimer = undefined;
+      }
+    }, YT_STEP_MS);
   };
   ytSources.add(apply);
   void loadYouTube()
@@ -342,9 +370,9 @@ function youTubeSource(track: AmbientTrack): Source {
     });
   return {
     meter: null,
-    setGain(g) {
+    setGain(g, fade) {
       channel = g;
-      apply();
+      apply(fade);
     },
     play() {
       wantPlay = true;
@@ -364,13 +392,15 @@ function youTubeSource(track: AmbientTrack): Source {
       setYtState(track.id, null);
       setNeedsClick(track.id, false);
       ytSources.delete(apply);
+      clearInterval(fadeTimer);
+      clearInterval(fadeTimer);
       player?.destroy();
       el.remove();
     },
   };
 }
 
-const ytSources = new Set<() => void>();
+const ytSources = new Set<(fade?: number) => void>();
 
 // --- voices --------------------------------------------------------------------------------------
 
@@ -380,7 +410,26 @@ interface Voice {
   track: AmbientTrack;
   source: Source;
   active: boolean;
+  muted?: boolean; // channel mute last applied
   stopTimer?: ReturnType<typeof setTimeout>;
+}
+
+let lastMasterMuted: boolean | undefined;
+let lastMasterGain: number | undefined;
+
+/** Moves an AudioParam to `value` along the even-in-dB fade curve, or at once. */
+function rampParam(c: AudioContext, p: AudioParam, value: number, fade: number) {
+  const now = c.currentTime;
+  const current = p.value;
+  p.cancelScheduledValues(now);
+  if (fade <= 0 || Math.abs(current - value) < 1e-4) {
+    p.setValueAtTime(value, now);
+    return;
+  }
+  const n = Math.max(2, Math.round(fade * 50));
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) curve[i] = fadeAt(current, value, (fade * i) / (n - 1), fade);
+  p.setValueCurveAtTime(curve, now, fade);
 }
 
 const voices = new Map<string, Voice>();
@@ -427,7 +476,18 @@ function reconcile() {
     v.track = track;
     clearTimeout(v.stopTimer);
     if (p.active) {
-      v.source.setGain(p.gain, true);
+      // Mute is a slow fade; a new or returning voice fades in; a fader moves at once.
+      const youtube = track.source === 'youtube';
+      const fade =
+        v.muted !== undefined && v.muted !== p.muted
+          ? FADE.mute
+          : !v.active
+            ? youtube
+              ? 0
+              : FADE.scene
+            : FADE.fader;
+      v.muted = p.muted;
+      v.source.setGain(p.gain, fade);
       if (!v.active) v.source.play();
       v.active = true;
     } else if (v.active) {
@@ -441,8 +501,16 @@ function reconcile() {
       fadeOut(v, true);
     }
   }
-  if (master && ctx) master.gain.setTargetAtTime(masterGain(), ctx.currentTime, 0.05);
-  for (const apply of ytSources) apply();
+  // The master pause fades like a mute; the master fader follows the hand.
+  const masterMuted = s.settings.ambient.muted;
+  const masterFade =
+    lastMasterMuted !== undefined && masterMuted !== lastMasterMuted ? FADE.mute : FADE.fader;
+  lastMasterMuted = masterMuted;
+  if (master && ctx) rampParam(ctx, master.gain, masterGain(), masterFade);
+  // YouTube players follow the master only when it changed: a channel fade must not be cut short.
+  const mg = masterGain();
+  if (mg !== lastMasterGain) for (const apply of ytSources) apply(masterFade);
+  lastMasterGain = mg;
   // Players of deleted tracks go for good.
   for (const [id, list] of ytCache) {
     if (s.tracks[id]) continue;
@@ -482,7 +550,7 @@ function releaseYouTube(trackId: Id, source: Source) {
 
 function fadeOut(v: Voice, destroy: boolean) {
   const youtube = v.track.source === 'youtube';
-  v.source.setGain(0, !youtube);
+  v.source.setGain(0, youtube ? 0 : FADE.scene);
   const stop = () => {
     if (destroy) {
       voices.delete(v.key);

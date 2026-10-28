@@ -65,7 +65,27 @@ export interface VoicePlan {
   slot: AmbientSlot;
   trackId: Id;
   active: boolean; // false: silent and paused (a global channel muted by the scene)
-  gain: number; // channel gain, before the master
+  gain: number; // channel gain, before the master (0 while muted)
+  muted: boolean;
+}
+
+/** Fades: the mute buttons are slow on purpose; faders follow the hand. */
+export const FADE = { mute: 5, scene: 1.5, fader: 0.08 };
+
+const FADE_FLOOR = 10 ** (FLOOR_DB / 20); // −60 dB: silence for the ear
+
+/**
+ * Gain `elapsed` seconds into a fade from `from` to `to` lasting `duration` seconds. The level
+ * moves evenly in dB, as the ear hears it (a linear gain fade sounds flat, then drops at once);
+ * silence counts as −60 dB and is reached exactly at the end.
+ */
+export function fadeAt(from: number, to: number, elapsed: number, duration: number): number {
+  if (duration <= 0 || elapsed >= duration) return to;
+  const k = Math.max(0, elapsed) / duration;
+  const a = 20 * Math.log10(Math.max(from, FADE_FLOOR));
+  const b = 20 * Math.log10(Math.max(to, FADE_FLOOR));
+  const g = 10 ** ((a + (b - a) * k) / 20);
+  return g <= FADE_FLOOR ? 0 : g;
 }
 
 /**
@@ -82,10 +102,20 @@ export function mixPlan(
   const ducked = sceneOn.length > 0 && scene.muteGlobal;
   const gain = (c: AmbientChannel) => (c.muted ? 0 : faderToGain(c.volume));
   return [
-    ...global
-      .filter(exists)
-      .map((c) => ({ slot: 'global' as const, trackId: c.trackId, active: !ducked, gain: gain(c) })),
-    ...sceneOn.map((c) => ({ slot: 'scene' as const, trackId: c.trackId, active: true, gain: gain(c) })),
+    ...global.filter(exists).map((c) => ({
+      slot: 'global' as const,
+      trackId: c.trackId,
+      active: !ducked,
+      gain: gain(c),
+      muted: c.muted,
+    })),
+    ...sceneOn.map((c) => ({
+      slot: 'scene' as const,
+      trackId: c.trackId,
+      active: true,
+      gain: gain(c),
+      muted: c.muted,
+    })),
   ];
 }
 
