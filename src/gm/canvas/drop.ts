@@ -2,15 +2,16 @@ import { CELL } from '../../core/constants';
 import type { Vec2 } from '../../core/types';
 import { screenToWorld } from '../../core/viewport';
 import { t } from '../../i18n/ru';
-import { placeAsset } from '../../state/items';
+import { placeAsset, placeSound } from '../../state/items';
 import { activeScene, getGm } from '../../state/store';
 import { getUi, toast } from '../../state/ui';
 import { analyzeFile, createAsset, defaultsFor, detectFor, guessType, isImageFile } from '../importer';
 
 export const ASSET_MIME = 'application/x-vtt-asset';
+export const SOUND_MIME = 'application/x-vtt-sound';
 
 export function isCanvasDrag(dt: DataTransfer): boolean {
-  return dt.types.includes('Files') || dt.types.includes(ASSET_MIME);
+  return dt.types.includes('Files') || dt.types.includes(ASSET_MIME) || dt.types.includes(SOUND_MIME);
 }
 
 /**
@@ -21,6 +22,11 @@ export async function handleCanvasDrop(dt: DataTransfer, screenPoint: Vec2): Pro
   const scene = activeScene();
   if (!scene) return;
   const world = screenToWorld(screenPoint, scene.gmViewport, getUi().screen);
+  const trackId = dt.getData(SOUND_MIME);
+  if (trackId) {
+    placeSound(trackId, world);
+    return;
+  }
   const assetId = dt.getData(ASSET_MIME);
   if (assetId) {
     const asset = getGm().assets[assetId];

@@ -479,7 +479,7 @@ select:focus,
   align-items: center;
   gap: 2px;
   padding: 4px;
-  z-index: 5;
+  z-index: 9; /* above the dock and its tray, which sit above the canvas overlays */
 }
 
 .plaque-select {
@@ -1577,11 +1577,17 @@ kbd {
 
 /* --- ambient mixer ------------------------------------------------------------------------- */
 
-.ambient-wrap {
+.audio-chips {
   position: absolute;
   right: 92px; /* left of the grid button */
   bottom: 16px;
   z-index: 8;
+  display: flex;
+  gap: 8px;
+}
+
+.ambient-wrap {
+  position: relative;
 }
 
 .ambient-wrap > .ambient-chip {
@@ -1905,4 +1911,135 @@ kbd {
   border-radius: 6px;
   background: var(--panel-2);
   color: inherit;
+}
+
+/* --- sounds --------------------------------------------------------------------------------- */
+
+.sound-plaque {
+  gap: 6px;
+}
+
+.sound-play {
+  max-width: 360px;
+}
+
+.sound-plaque-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-tile .tile-more.sound-preview {
+  display: block;
+}
+
+.sound-tile .tile-more.sound-preview.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.soundpad {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(640px, calc(100vw - 140px));
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.soundpad-volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.soundpad-volume input {
+  width: 120px;
+  accent-color: var(--accent);
+}
+
+.pads {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.pad {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.pad.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.pad-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pad.on .pad-main {
+  color: var(--accent);
+}
+
+.pad-main:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pad-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+}
+
+.pad-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 4px 8px;
+}
+
+.pad-foot input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.pad.add {
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  min-height: 78px;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pad.add select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
 }

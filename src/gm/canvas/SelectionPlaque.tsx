@@ -7,7 +7,9 @@ import {
   Grid3x3,
   Lock,
   LockOpen,
+  Play,
   Scissors,
+  Square,
   Tag,
   Trash2,
 } from 'lucide-react';
@@ -32,10 +34,31 @@ import { IconButton } from '../ui/common';
 import { itemNodes, useCanvasUi } from './canvasState';
 import { formatSize, PICKABLE_LAYERS, selectionInfo, TOKEN_SIZES } from './selectionInfo';
 import { toggleFogCut } from './tools';
+import { toggleSound, useSoundpad } from '../soundpad';
 
 export async function editLabel(ids: string[], current: string): Promise<void> {
   const text = await promptDialog(t.item.labelPrompt, current);
   if (text !== null) setLabel(ids, text);
+}
+
+/** The sound token's offer: play its sound (or stop it while it plays). */
+function SoundPlay({ trackId }: { trackId: string }) {
+  const track = useGm((s) => s.tracks[trackId]);
+  const playing = useSoundpad((s) => !!s.playing[trackId]);
+  if (!track) return <span className="muted sound-plaque-name">{t.sounds.missing}</span>;
+  return (
+    <button
+      type="button"
+      className={'btn sound-play' + (playing ? '' : ' primary')}
+      onClick={() => void toggleSound(trackId)}
+      autoFocus
+    >
+      {playing ? <Square size={16} /> : <Play size={16} />}
+      <span className="sound-plaque-name">
+        {playing ? t.sounds.stop(track.name) : t.sounds.play(track.name)}
+      </span>
+    </button>
+  );
 }
 
 /** Context bar under the selection: visibility, lock, size, label, order, layer, align, delete. */
@@ -76,6 +99,34 @@ export function SelectionPlaque() {
   if (selected.length === 0 || busy || gesture || menuOpen) return null;
   const info = selectionInfo(selected);
   const { ids } = info;
+  const sound = selected.length === 1 && selected[0].kind === 'sound' ? selected[0] : null;
+
+  if (sound) {
+    return (
+      <div
+        ref={ref}
+        className="plaque panel sound-plaque"
+        style={{ left: pos?.x ?? -9999, top: pos?.y ?? -9999 }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <SoundPlay trackId={sound.trackId} />
+        <IconButton
+          tipSide="top"
+          icon={<Copy size={20} />}
+          label={t.item.duplicate}
+          hotkey="Ctrl+D"
+          onClick={() => duplicateItems(ids)}
+        />
+        <IconButton
+          tipSide="top"
+          icon={<Trash2 size={20} />}
+          label={t.item.delete}
+          hotkey="Delete"
+          onClick={() => deleteItems(ids)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

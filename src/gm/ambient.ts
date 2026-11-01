@@ -103,6 +103,11 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let masterMeter: AnalyserNode | null = null;
 
+/** The page's one audio context (the soundpad plays through it too). */
+export function sharedAudio(): AudioContext {
+  return audio().ctx;
+}
+
 function audio(): { ctx: AudioContext; master: GainNode } {
   if (!ctx) {
     ctx = new AudioContext();
@@ -126,7 +131,7 @@ function masterGain(): number {
   return a.muted ? 0 : faderToGain(a.volume);
 }
 
-interface Source {
+export interface Source {
   setGain(g: number, fade: number): void; // channel gain × active, before the master; fade in s
   play(): void;
   pause(): void;
@@ -250,7 +255,18 @@ function ytHost(): HTMLElement {
   return host;
 }
 
-function youTubeSource(track: AmbientTrack): Source {
+export interface YouTubeOptions {
+  loop: boolean; // ambient loops; a sound plays once
+  level: () => number; // the output this player sits behind (ambient master or soundpad)
+  onEnded?: () => void;
+}
+
+const ambientLevel = () => (masterFade ? fadeValue(masterFade, clock()) : masterGain());
+
+export function youTubeSource(
+  track: AmbientTrack,
+  opts: YouTubeOptions = { loop: true, level: ambientLevel },
+): Source {
   const ENDED = 0;
   const PLAYING = 1;
   const BUFFERING = 3;
@@ -315,7 +331,7 @@ function youTubeSource(track: AmbientTrack): Source {
   const apply = () => {
     if (!ready) return;
     const now = clock();
-    const level = masterFade ? fadeValue(masterFade, now) : masterGain();
+    const level = opts.level();
     const n = Math.round(fadeValue(channelFade, now) * level * 100);
     if (n !== sent) player!.setVolume(n);
     sent = n;
@@ -344,8 +360,13 @@ function youTubeSource(track: AmbientTrack): Source {
               }
             }
             if (e.data === ENDED) {
-              player!.seekTo(0, true);
-              player!.playVideo();
+              if (opts.loop) {
+                player!.seekTo(0, true);
+                player!.playVideo();
+              } else {
+                wantPlay = false;
+                opts.onEnded?.();
+              }
             }
           },
           onError(e) {

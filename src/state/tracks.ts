@@ -1,7 +1,16 @@
 import { nanoid } from 'nanoid';
-import { globalChannels, parseYouTubeId, sceneAmbient } from '../core/ambient';
+import { globalChannels, parseYouTubeId, sceneAmbient, trackKind } from '../core/ambient';
 import { sha256Hex } from '../core/sha256';
-import type { AmbientChannel, AmbientSettings, AmbientTrack, Id, SceneAmbient } from '../core/types';
+import type {
+  AmbientChannel,
+  AmbientSettings,
+  AmbientTrack,
+  Id,
+  SceneAmbient,
+  SoundPad,
+  SoundpadSettings,
+  TrackKind,
+} from '../core/types';
 import { recordDeletion, remoteFiles } from '../cloud/remote';
 import { db } from '../db/db';
 import { updateSettings } from './assets';
@@ -34,15 +43,23 @@ async function youTubeTitle(id: string): Promise<string> {
 }
 
 /** Adds a YouTube video by its link; the same video twice is one track. */
-export async function addYouTubeTrack(link: string, invalid: string): Promise<AmbientTrack> {
+export async function addYouTubeTrack(
+  link: string,
+  invalid: string,
+  kind: TrackKind = 'music',
+): Promise<AmbientTrack> {
   const youtubeId = parseYouTubeId(link);
   if (!youtubeId) throw new TrackError(invalid);
-  const dup = Object.values(getGm().tracks).find((tr) => tr.youtubeId === youtubeId);
+  // The same video may be both music and a sound: dedupe inside one library.
+  const dup = Object.values(getGm().tracks).find(
+    (tr) => tr.youtubeId === youtubeId && trackKind(tr) === kind,
+  );
   if (dup) return dup;
   const now = Date.now();
   const track: AmbientTrack = {
     id: nanoid(),
     name: await youTubeTitle(youtubeId),
+    kind,
     source: 'youtube',
     youtubeId,
     volume: 1,
@@ -54,14 +71,15 @@ export async function addYouTubeTrack(link: string, invalid: string): Promise<Am
 }
 
 /** Adds an audio file (MP3, OGG, WAV…); the same file twice is one track. */
-export async function addFileTrack(file: File): Promise<AmbientTrack> {
+export async function addFileTrack(file: File, kind: TrackKind = 'music'): Promise<AmbientTrack> {
   const hash = await sha256Hex(await file.arrayBuffer());
-  const dup = Object.values(getGm().tracks).find((tr) => tr.hash === hash);
+  const dup = Object.values(getGm().tracks).find((tr) => tr.hash === hash && trackKind(tr) === kind);
   if (dup) return dup;
   const now = Date.now();
   const track: AmbientTrack = {
     id: nanoid(),
     name: baseName(file.name),
+    kind,
     source: 'file',
     blobId: nanoid(),
     hash,
@@ -104,13 +122,20 @@ export async function deleteTrack(id: Id, opts: { fromCloud?: boolean } = {}): P
   setGm((d) => {
     delete d.tracks[id];
     for (const sc of Object.values(d.scenes)) {
+      // Sound tokens of the track go with it.
+      const tokens = Object.values(sc.items).filter((it) => it.kind === 'sound' && it.trackId === id);
+      for (const it of tokens) delete sc.items[it.id];
       const before = sceneAmbient(sc);
-      if (!before.channels.some((c) => c.trackId === id)) continue;
-      sc.ambient = { ...before, channels: before.channels.filter((c) => c.trackId !== id) };
-      delete sc.ambientTrackId;
-      sc.updatedAt = now;
+      const inMixer = before.channels.some((c) => c.trackId === id);
+      if (inMixer) {
+        sc.ambient = { ...before, channels: before.channels.filter((c) => c.trackId !== id) };
+        delete sc.ambientTrackId;
+      }
+      if (inMixer || tokens.length) sc.updatedAt = now;
     }
   });
+  const pads = soundpad().pads;
+  if (pads.some((p) => p.trackId === id)) await setSoundpad({ pads: pads.filter((p) => p.trackId !== id) });
   const global = globalChannels(getGm().settings.ambient);
   if (global.some((c) => c.trackId === id)) await setGlobalChannels(global.filter((c) => c.trackId !== id));
   await db.tracks.delete(id);
@@ -118,6 +143,33 @@ export async function deleteTrack(id: Id, opts: { fromCloud?: boolean } = {}): P
   if (!opts.fromCloud) {
     await recordDeletion({ kind: 'track', id, at: now, ...(track.hash ? { hash: track.hash } : {}) });
   }
+}
+
+// --- soundpad -------------------------------------------------------------------------------------
+
+const DEFAULT_PAD_VOLUME = 1;
+
+function soundpad(): SoundpadSettings {
+  return getGm().settings.soundpad ?? { pads: [], volume: 0.85 };
+}
+
+export function setSoundpad(patch: Partial<SoundpadSettings>): Promise<void> {
+  return updateSettings({ soundpad: { ...soundpad(), ...patch } });
+}
+
+/** Adds a button for the sound (once). */
+export function addPad(trackId: Id): Promise<void> {
+  const pads = soundpad().pads;
+  if (pads.some((p) => p.trackId === trackId)) return Promise.resolve();
+  return setSoundpad({ pads: [...pads, { trackId, volume: DEFAULT_PAD_VOLUME }] });
+}
+
+export function updatePad(trackId: Id, patch: Partial<Omit<SoundPad, 'trackId'>>): Promise<void> {
+  return setSoundpad({ pads: soundpad().pads.map((p) => (p.trackId === trackId ? { ...p, ...patch } : p)) });
+}
+
+export function removePad(trackId: Id): Promise<void> {
+  return setSoundpad({ pads: soundpad().pads.filter((p) => p.trackId !== trackId) });
 }
 
 export function setAmbient(patch: Partial<AmbientSettings>): Promise<void> {

@@ -15,6 +15,7 @@ import { t } from '../i18n/ru';
 import { flushScenes, markSaved } from '../state/persistence';
 import { dropHistory, getGm, refreshHistoryFlags, setGm } from '../state/store';
 import { getTrackBlob } from '../state/tracks';
+import { trackKind } from '../core/ambient';
 import { getAssetBlob, makeThumbnail, notifyThumb } from './images';
 
 /**
@@ -139,7 +140,11 @@ async function importTracks(parsed: ParsedBackup) {
   const fresh = parsed.tracks.filter(
     (tr) =>
       !getGm().tracks[tr.id] &&
-      !have.some((h) => (tr.hash && h.hash === tr.hash) || (tr.youtubeId && h.youtubeId === tr.youtubeId)),
+      !have.some(
+        (h) =>
+          trackKind(h) === trackKind(tr) &&
+          ((tr.hash && h.hash === tr.hash) || (tr.youtubeId && h.youtubeId === tr.youtubeId)),
+      ),
   );
   if (fresh.length === 0) return;
   const blobs = fresh

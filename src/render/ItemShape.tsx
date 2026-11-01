@@ -3,7 +3,16 @@ import { memo } from 'react';
 import { Circle, Ellipse, Group, Image as KImage, Label, Line, Rect, Tag, Text } from 'react-konva';
 import { CELL, FONT_FAMILIES, TEXT_BACKGROUND } from '../core/constants';
 import { imageBounds, imageScale } from '../core/geometry';
-import type { DiscToken, DrawingItem, ImageItem, Item, RulerItem, TextItem, Vec2 } from '../core/types';
+import type {
+  DiscToken,
+  DrawingItem,
+  ImageItem,
+  Item,
+  RulerItem,
+  SoundItem,
+  TextItem,
+  Vec2,
+} from '../core/types';
 import { MeasureShape } from './MeasureShape';
 import { textWidth } from './textMeasure';
 
@@ -25,6 +34,8 @@ interface CommonProps {
   hiddenFor?: boolean; // text being edited in place
   /** Permanent rulers: distance label and the zoom that sets line and label sizes. */
   ruler?: { label: string; zoom: number };
+  /** Sound tokens (GM only): the track's name and whether it plays now. */
+  sound?: { name: string; playing: boolean; missing: boolean };
 }
 
 function ImageNode({
@@ -286,6 +297,66 @@ function RulerNode({
   );
 }
 
+const SOUND_R = CELL * 0.36;
+
+/** A sound token: a round button with a note, its name below; it glows while the sound plays. */
+function SoundNode({
+  item,
+  position,
+  opacity,
+  listening,
+  nodeRef,
+  sound,
+}: CommonProps & { item: SoundItem }) {
+  if (!sound) return null;
+  const p = position ?? item.position;
+  const fill = sound.missing ? '#4b5563' : sound.playing ? '#a78bfa' : '#6d28d9';
+  return (
+    <Group ref={nodeRef} id={item.id} name="item" x={p.x} y={p.y} opacity={opacity} listening={listening}>
+      {sound.playing ? <Circle radius={SOUND_R * 1.35} fill="rgba(167, 139, 250, 0.35)" /> : null}
+      <Circle
+        radius={SOUND_R}
+        fill={fill}
+        stroke="#ffffff"
+        strokeWidth={CELL * 0.03}
+        shadowColor="#000"
+        shadowBlur={8}
+        shadowOpacity={0.5}
+      />
+      <Text
+        x={-SOUND_R}
+        y={-SOUND_R}
+        width={SOUND_R * 2}
+        height={SOUND_R * 2}
+        text={sound.missing ? '?' : '♪'}
+        align="center"
+        verticalAlign="middle"
+        fontSize={SOUND_R * 1.1}
+        fontStyle="bold"
+        fontFamily={FONT_FAMILIES.sans}
+        fill="#ffffff"
+        listening={false}
+      />
+      <Text
+        x={-CELL}
+        y={SOUND_R + CELL * 0.06}
+        width={CELL * 2}
+        text={sound.name}
+        align="center"
+        fontSize={CELL * 0.16}
+        fontFamily={FONT_FAMILIES.sans}
+        fill="#ffffff"
+        shadowColor="#000"
+        shadowBlur={4}
+        shadowOpacity={0.9}
+        wrap="none"
+        ellipsis
+        listening={false}
+      />
+    </Group>
+  );
+}
+
 export interface ItemShapeProps extends CommonProps {
   item: Item;
   source?: ImageSource;
@@ -305,6 +376,8 @@ export const ItemShape = memo(function ItemShape(props: ItemShapeProps) {
       return <DrawingNode {...props} item={item} />;
     case 'ruler':
       return <RulerNode {...props} item={item} />;
+    case 'sound':
+      return <SoundNode {...props} item={item} />;
     default:
       return null; // fog is drawn by its own layer
   }

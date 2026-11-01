@@ -1,4 +1,4 @@
-import { Castle, Music, Plus, Trash2 } from 'lucide-react';
+import { Castle, Music, Plus, Trash2, Volume2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ASSET_TYPES } from '../../../core/constants';
 import { tokenGrid } from '../../../core/geometry';
@@ -175,7 +175,8 @@ export function AssetManager({ tab: initialTab, assetId }: { tab?: ManagerTab; a
   }, [scenes, collectionId, query]);
 
   const asset = selected ? assets[selected] : undefined;
-  const assetType = tab !== 'scenes' && tab !== 'search' && tab !== 'ambient' ? tab : undefined;
+  const library = tab === 'ambient' || tab === 'sounds';
+  const assetType = tab !== 'scenes' && tab !== 'search' && !library ? tab : undefined;
 
   return (
     <Modal title={t.manager.title} onClose={close} wide className="asset-manager">
@@ -201,9 +202,13 @@ export function AssetManager({ tab: initialTab, assetId }: { tab?: ManagerTab; a
           <button type="button" className={tab === 'ambient' ? 'on' : ''} onClick={() => setTab('ambient')}>
             <Music size={18} /> {t.ambient.tab}
           </button>
+          <button type="button" className={tab === 'sounds' ? 'on' : ''} onClick={() => setTab('sounds')}>
+            <Volume2 size={18} /> {t.sounds.tab}
+          </button>
         </nav>
-        {tab === 'ambient' ? <AmbientLibrary /> : null}
-        <div className="am-main" hidden={tab === 'ambient'}>
+        {tab === 'ambient' ? <AmbientLibrary key="music" kind="music" /> : null}
+        {tab === 'sounds' ? <AmbientLibrary key="sound" kind="sound" /> : null}
+        <div className="am-main" hidden={library}>
           <div className="am-head">
             <CollectionSelect />
             <input
@@ -255,7 +260,7 @@ export function AssetManager({ tab: initialTab, assetId }: { tab?: ManagerTab; a
             {tab !== 'scenes' && list.length === 0 ? <div className="tray-empty">{t.dock.empty}</div> : null}
           </div>
         </div>
-        {asset && tab !== 'scenes' && tab !== 'ambient' ? (
+        {asset && tab !== 'scenes' && !library ? (
           <AssetEditor key={asset.id} asset={asset} onClose={() => setSelected(null)} />
         ) : null}
       </div>

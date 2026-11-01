@@ -44,6 +44,7 @@ export function projectScene(scene: Scene, assets: Record<Id, Asset>): PlayerSce
   const items: Record<Id, Item> = {};
   const refs: Record<Id, AssetRef> = {};
   for (const item of Object.values(scene.items)) {
+    if (item.kind === 'sound') continue; // the GM's sound buttons are never sent, visible or not
     if (!isVisibleToPlayers(item, scene.items)) continue;
     if (item.kind === 'image') {
       const asset = assets[item.assetId];

@@ -77,6 +77,23 @@ describe('projection', () => {
     expect(JSON.stringify(p)).not.toContain('"t"');
   });
 
+  it('never sends sound tokens, visible or not', () => {
+    const sound = {
+      id: 's1',
+      kind: 'sound',
+      layer: 'note',
+      z: 0,
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+      visible: true,
+      locked: false,
+      trackId: 't1',
+    } as const;
+    const withSound = { ...scene, items: { ...scene.items, s1: sound } } as Scene;
+    expect(projectScene(withSound, { a1: asset }).items.s1).toBeUndefined();
+  });
+
   it('drops images whose asset is unknown', () => {
     expect(Object.keys(projectScene(scene, {}).items)).toEqual(['t']);
   });

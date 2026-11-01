@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AssetType, Id, Size } from '../core/types';
 
-export type DockTab = 'search' | 'scenes' | AssetType;
+export type DockTab = 'search' | 'scenes' | 'sounds' | AssetType;
 
 export type Dialog =
   | { kind: 'import'; files: File[]; type?: AssetType }

@@ -69,6 +69,8 @@ export function snapAxis(value: number, footprintCells: number): number {
 export function itemFootprint(item: Item, imageSize?: { width: number; height: number }): Vec2 | null {
   let fp: Vec2 | null = null;
   if (item.kind === 'disc') fp = { x: item.sizeCells, y: item.sizeCells };
+  else if (item.kind === 'sound')
+    fp = { x: 1, y: 1 }; // a one-cell button, centered in its cell
   else if (item.kind === 'image' && imageSize) {
     const s = imageScale(item.grid, item.scale);
     fp = { x: (imageSize.width * s.x) / CELL, y: (imageSize.height * s.y) / CELL };

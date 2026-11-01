@@ -6,6 +6,7 @@ import { initCloud } from '../cloud/sync';
 import { focusFinder } from '../state/backdrop';
 import { boot } from '../state/boot';
 import { initAmbient } from './ambient';
+import { initSoundpad } from './soundpad';
 import { detectFocus } from './backdropFocus';
 import { App } from './App';
 import { installHotkeys } from './hotkeys';
@@ -18,5 +19,6 @@ focusFinder.find = detectFocus;
 void boot().then(() => {
   initPlayerOutput();
   initAmbient();
+  initSoundpad();
   void initCloud();
 });

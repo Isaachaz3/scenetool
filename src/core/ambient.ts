@@ -1,5 +1,13 @@
 // Ambient sound: which track plays and how YouTube links are read.
-import type { AmbientChannel, AmbientSettings, AmbientTrack, Id, Scene, SceneAmbient } from './types';
+import type {
+  AmbientChannel,
+  AmbientSettings,
+  AmbientTrack,
+  Id,
+  Scene,
+  SceneAmbient,
+  TrackKind,
+} from './types';
 
 const ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -155,4 +163,9 @@ export function youTubeProblem(code: number): YouTubeProblem {
   if (code === 100) return 'missing'; // removed or private
   if (code === 2) return 'broken'; // bad video id
   return 'unavailable'; // 5: the HTML5 player failed
+}
+
+/** Which library a track is in: music for the mixer, sounds for the soundpad and tokens. */
+export function trackKind(track: AmbientTrack): TrackKind {
+  return track.kind ?? 'music';
 }

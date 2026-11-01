@@ -9,10 +9,14 @@ import {
   MoreHorizontal,
   Paperclip,
   Pencil,
+  Play,
   Plus,
   Presentation,
   Search,
+  Square,
   StickyNote,
+  Volume2,
+  Youtube,
   Trash2,
   User,
   Rabbit,
@@ -25,11 +29,14 @@ import type { Asset, AssetType, Scene } from '../../core/types';
 import { t } from '../../i18n/ru';
 import { createCollection, selectCollection } from '../../state/assets';
 import { toggleBackdrop } from '../../state/backdrop';
-import { placeAsset } from '../../state/items';
+import { placeAsset, placeSound } from '../../state/items';
+import { trackKind } from '../../core/ambient';
+import { toggleSound, useSoundpad } from '../soundpad';
+import { viewCenter as soundCenter } from './AmbientLibrary';
 import { deleteScene, duplicateScene, openScene, renameScene } from '../../state/scenes';
 import { activeScene, getGm, useGm } from '../../state/store';
 import { confirmDialog, openDialog, promptDialog, setDockTab, useUi, type DockTab } from '../../state/ui';
-import { ASSET_MIME } from '../canvas/drop';
+import { ASSET_MIME, SOUND_MIME } from '../canvas/drop';
 import { useThumbUrl } from '../images';
 import { ACCEPT_ATTR, isImageFile } from '../importer';
 import { IconButton, Panel, useClickOutside } from './common';
@@ -176,7 +183,7 @@ export function CollectionSelect() {
   );
 }
 
-function Tray({ tab }: { tab: DockTab }) {
+function Tray({ tab }: { tab: Exclude<DockTab, 'sounds'> }) {
   const assets = useGm((s) => s.assets);
   const scenes = useGm((s) => s.scenes);
   const collectionId = useGm((s) => s.collectionId);
@@ -305,14 +312,74 @@ const TABS: { id: DockTab; icon: ReactNode; label: string }[] = [
   { id: 'search', icon: <Search size={20} />, label: t.dock.search },
   { id: 'scenes', icon: <Castle size={20} />, label: t.dock.scenes },
   ...ASSET_TYPES.map((type) => ({ id: type as DockTab, icon: TYPE_ICONS[type], label: t.assetTypes[type] })),
+  { id: 'sounds', icon: <Volume2 size={20} />, label: t.sounds.dockTab },
 ];
+
+/** Sounds tab: a click puts a sound token in the middle of the view, a drag puts it there. */
+function SoundTray() {
+  const trackMap = useGm((s) => s.tracks);
+  const playing = useSoundpad((s) => s.playing);
+  const sounds = useMemo(
+    () =>
+      Object.values(trackMap)
+        .filter((tr) => trackKind(tr) === 'sound')
+        .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+    [trackMap],
+  );
+  return (
+    <Panel className="dock-tray">
+      <div className="tray-head">
+        <span className="muted">{t.sounds.gmOnly}</span>
+        <div className="grow" />
+        <button
+          type="button"
+          className="btn"
+          onClick={() => openDialog({ kind: 'assetManager', tab: 'sounds' })}
+        >
+          <Plus size={16} /> {t.dock.add}
+        </button>
+      </div>
+      <div className="tray-items">
+        {sounds.map((tr) => (
+          <div key={tr.id} className="tile sound-tile" title={`${tr.name}\n${t.sounds.tileHint}`}>
+            <button
+              type="button"
+              className="tile-main"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData(SOUND_MIME, tr.id);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
+              onClick={() => placeSound(tr.id, soundCenter())}
+            >
+              <span className="tile-thumb">
+                {tr.source === 'youtube' ? <Youtube size={24} /> : <Volume2 size={24} />}
+              </span>
+              <span className="tile-name">{tr.name}</span>
+            </button>
+            <button
+              type="button"
+              className={'tile-more sound-preview' + (playing[tr.id] ? ' on' : '')}
+              aria-label={playing[tr.id] ? t.sounds.stop(tr.name) : t.sounds.play(tr.name)}
+              title={playing[tr.id] ? t.sounds.stop(tr.name) : t.sounds.play(tr.name)}
+              onClick={() => void toggleSound(tr.id)}
+            >
+              {playing[tr.id] ? <Square size={14} /> : <Play size={14} />}
+            </button>
+          </div>
+        ))}
+        {sounds.length === 0 ? <div className="tray-empty">{t.sounds.empty}</div> : null}
+      </div>
+    </Panel>
+  );
+}
 
 export function Dock() {
   const tab = useUi((s) => s.dockTab);
-  const type = tab && tab !== 'scenes' && tab !== 'search' ? tab : 'map';
+  const type = tab && tab !== 'scenes' && tab !== 'search' && tab !== 'sounds' ? tab : 'map';
   return (
     <div className="dock">
-      {tab ? <Tray tab={tab} /> : null}
+      {tab === 'sounds' ? <SoundTray /> : tab ? <Tray tab={tab} /> : null}
       <Panel
         className="dock-tabs"
         onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}

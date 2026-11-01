@@ -19,6 +19,8 @@ import { gmImages } from '../images';
 import { gmPointerTrail, itemNodes, registerNode, stageRef, useCanvasUi } from './canvasState';
 import { handleCanvasDrop, isCanvasDrag } from './drop';
 import { PlayerFrame } from './PlayerFrame';
+import { useSoundpad } from '../soundpad';
+import { t } from '../../i18n/ru';
 import { useCanvasInput } from './input';
 
 const GmItem = memo(function GmItem({ item }: { item: Item }) {
@@ -32,9 +34,11 @@ const GmItem = memo(function GmItem({ item }: { item: Item }) {
   );
   const ref = useCallback((node: Konva.Node | null) => registerNode(item.id, node), [item.id]);
   const ruler = useRulerLook(item);
+  const sound = useSoundLook(item);
   return (
     <ItemShape
       ruler={ruler}
+      sound={sound}
       item={item}
       position={override}
       opacity={item.visible ? 1 : HIDDEN_OPACITY}
@@ -46,6 +50,17 @@ const GmItem = memo(function GmItem({ item }: { item: Item }) {
     />
   );
 });
+
+/** Name and state of a sound token's track; undefined for other items. */
+function useSoundLook(item: Item) {
+  const trackId = item.kind === 'sound' ? item.trackId : undefined;
+  const name = useGm((s) => (trackId ? s.tracks[trackId]?.name : undefined));
+  const playing = useSoundpad((s) => (trackId ? !!s.playing[trackId] : false));
+  return useMemo(
+    () => (trackId ? { name: name ?? t.sounds.missing, playing, missing: !name } : undefined),
+    [trackId, name, playing],
+  );
+}
 
 /** Label and zoom of a permanent ruler; undefined for other items. */
 function useRulerLook(item: Item) {

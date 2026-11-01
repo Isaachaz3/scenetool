@@ -109,9 +109,12 @@ export interface Scene {
 }
 
 /** Background sound, looped: a YouTube video or an audio file kept like an image asset. */
+export type TrackKind = 'music' | 'sound';
+
 export interface AmbientTrack {
   id: Id;
   name: string;
+  kind?: TrackKind; // music: the ambient mixer; sound: soundpad and sound tokens (absent: music)
   source: 'file' | 'youtube';
   youtubeId?: string;
   blobId?: Id; // file: original in the 'blobs' store
@@ -208,13 +211,31 @@ export interface RulerItem extends BaseItem {
   points: Vec2[];
 } // permanent ruler (P1)
 
-export type Item = ImageItem | DiscToken | DrawingItem | TextItem | FogShape | RulerItem;
+/** A sound on the GM's table: plays its track once on demand; players never get it. */
+export interface SoundItem extends BaseItem {
+  kind: 'sound';
+  trackId: Id;
+}
+
+export type Item = ImageItem | DiscToken | DrawingItem | TextItem | FogShape | RulerItem | SoundItem;
+
+/** One soundpad button: a track played once, with its own level (fader 0..1). */
+export interface SoundPad {
+  trackId: Id;
+  volume: number;
+}
+
+export interface SoundpadSettings {
+  pads: SoundPad[];
+  volume: number; // soundpad master fader, 0..1
+}
 
 export interface AppSettings {
   playerDefaults: { grid: boolean; ruler: boolean; pointer: boolean };
   fogGmOpacity: number;
   syncViewDuration: number; // ms
   ambient: AmbientSettings;
+  soundpad?: SoundpadSettings;
 }
 
 /** A ruler or movement line as shown on both screens. */

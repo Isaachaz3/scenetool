@@ -8,6 +8,7 @@ import { SelectionPlaque } from './canvas/SelectionPlaque';
 import { TextEditor } from './canvas/TextEditor';
 import { AlignPanel } from './ui/AlignPanel';
 import { AmbientChip } from './ui/AmbientPanel';
+import { SoundpadChip } from './ui/SoundpadPanel';
 import { BackdropOverlay } from './ui/BackdropOverlay';
 import { AssetManager } from './ui/dialogs/AssetManager';
 import { CloudDialog } from './ui/dialogs/CloudDialog';
@@ -89,7 +90,10 @@ export function App() {
       <Dock />
       <MainMenu />
       <GridViewPanel />
-      <AmbientChip />
+      <div className="audio-chips">
+        <SoundpadChip />
+        <AmbientChip />
+      </div>
       <WelcomeScreen />
       <DialogHost />
       <ConfirmPrompt />

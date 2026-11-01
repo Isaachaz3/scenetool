@@ -4,6 +4,7 @@ import { findCarrier } from '../core/attach';
 import { sortItems } from '../core/items';
 import { add, imageScale, rotate, snapItemPosition, sub } from '../core/geometry';
 import type {
+  SoundItem,
   Asset,
   DiscToken,
   Id,
@@ -88,6 +89,30 @@ export function placeAsset(asset: Asset, world: Vec2): Id | null {
     );
   }
   if (!item.locked) useGm.setState({ selection: [item.id] });
+  return item.id;
+}
+
+/** A sound token: a button on the GM's table that plays the sound; players never see it. */
+export function placeSound(trackId: Id, world: Vec2): Id | null {
+  const scene = activeScene();
+  if (!scene) return null;
+  const item: SoundItem = {
+    id: nanoid(),
+    kind: 'sound',
+    layer: 'note',
+    z: nextZ(scene, 'note'),
+    position: world,
+    rotation: 0,
+    scale: { x: 1, y: 1 },
+    visible: true,
+    locked: false,
+    trackId,
+  };
+  item.position = snapFor(item, world, scene);
+  changeScene((d) => {
+    d.items[item.id] = item;
+  });
+  useGm.setState({ selection: [item.id] });
   return item.id;
 }
 

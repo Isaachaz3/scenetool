@@ -20,6 +20,7 @@ import {
   globalChannels,
   sceneAmbient,
   youTubeStateName,
+  trackKind,
   type AmbientSlot,
 } from '../../core/ambient';
 import type { AmbientChannel, AmbientTrack, Id } from '../../core/types';
@@ -177,7 +178,10 @@ function Mixer() {
   const scene = useGm((s) => activeScene(s));
   const blocked = useAmbient((s) => s.blocked);
   const showPlayers = useAmbient((s) => s.showPlayers);
-  const tracks = Object.values(trackMap).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  // The mixer offers music only; short sounds belong to the soundpad.
+  const tracks = Object.values(trackMap)
+    .filter((tr) => trackKind(tr) === 'music')
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   const global = globalChannels(ambient).filter((c) => trackMap[c.trackId]);
   const sa = sceneAmbient(scene);
   const sceneChannels = sa.channels.filter((c) => trackMap[c.trackId]);
