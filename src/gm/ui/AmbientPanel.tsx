@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import {
+  FADE,
   dbToMeter,
   faderToDb,
   formatDb,
@@ -188,6 +189,21 @@ function Mixer() {
     <div className="panel mixer">
       <div className="mixer-head">
         <h4>{t.ambient.mixer}</h4>
+        <label className="mixer-fade" title={t.ambient.fadeHint}>
+          {t.ambient.fade}
+          <input
+            type="number"
+            min={0}
+            max={FADE.max}
+            step={0.5}
+            value={ambient.fade ?? FADE.inOut}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v)) void setAmbient({ fade: Math.min(FADE.max, Math.max(0, v)) });
+            }}
+          />
+          {t.ambient.seconds}
+        </label>
         {hasYouTube ? (
           <button
             type="button"

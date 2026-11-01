@@ -69,8 +69,29 @@ export interface VoicePlan {
   muted: boolean;
 }
 
-/** Fades: the mute buttons are slow on purpose; faders follow the hand. */
-export const FADE = { mute: 5, scene: 1.5, fader: 0.08 };
+/** Fades in seconds: every way in and out of a layer takes `inOut` (the mixer setting), faders follow the hand. */
+export const FADE = { inOut: 5, fader: 0.08, max: 20 };
+
+/** A running fade of one gain, in seconds on some clock. */
+export interface Fade {
+  from: number;
+  to: number;
+  start: number;
+  duration: number;
+}
+
+export function fadeValue(f: Fade, now: number): number {
+  return fadeAt(f.from, f.to, now - f.start, f.duration);
+}
+
+/**
+ * A new fade toward `to`, starting from wherever the old one is now: turning a layer back on
+ * half way through its fade-out goes up from that level, never jumps.
+ */
+export function retarget(f: Fade | null, to: number, duration: number, now: number): Fade {
+  const from = f ? fadeValue(f, now) : to;
+  return { from, to, start: now, duration };
+}
 
 const FADE_FLOOR = 10 ** (FLOOR_DB / 20); // −60 dB: silence for the ear
 

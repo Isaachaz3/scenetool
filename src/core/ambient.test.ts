@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   youTubeProblem,
   fadeAt,
+  fadeValue,
+  retarget,
   dbToMeter,
   faderToDb,
   faderToGain,
@@ -101,5 +103,17 @@ describe('ambient', () => {
     expect(fadeAt(0.2, 0.8, 0, 5)).toBeCloseTo(0.2);
     expect(fadeAt(1, 0, 7, 5)).toBe(0);
     expect(fadeAt(1, 0, 0, 0)).toBe(0);
+  });
+
+  it('turns a fade around from where it is', () => {
+    let f = retarget(null, 1, 5, 0); // a new layer starts at its level...
+    expect(fadeValue(f, 0)).toBe(1);
+    f = retarget(f, 0, 5, 10); // ...fades out from t = 10 s
+    const half = fadeValue(f, 12.5);
+    expect(20 * Math.log10(half)).toBeCloseTo(-30);
+    f = retarget(f, 1, 5, 12.5); // turned back on half way: up from −30 dB, no jump
+    expect(fadeValue(f, 12.5)).toBeCloseTo(half);
+    expect(fadeValue(f, 17.5)).toBe(1);
+    expect(retarget({ from: 0, to: 0, start: 0, duration: 0 }, 0.5, 5, 3).from).toBe(0);
   });
 });

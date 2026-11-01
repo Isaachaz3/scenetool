@@ -139,6 +139,7 @@ export interface AmbientSettings {
   channels: AmbientChannel[]; // global: play in every scene
   volume: number; // master fader, 0..1
   muted: boolean;
+  fade?: number; // seconds of every fade in and out (default 5)
   globalTrackId?: Id | null; // before the mixer: one global track
 }
 

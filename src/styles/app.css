@@ -1889,3 +1889,20 @@ kbd {
 .mixer-head h4 {
   margin-right: auto;
 }
+
+.mixer-fade {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mixer-fade input {
+  width: 56px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: inherit;
+}

@@ -2,7 +2,10 @@ import { create } from 'zustand';
 import {
   FADE,
   fadeAt,
+  fadeValue,
   faderToGain,
+  retarget,
+  type Fade,
   globalChannels,
   mixPlan,
   sceneAmbient,
@@ -15,8 +18,17 @@ import { activeScene, getGm, useGm } from '../state/store';
 import { getTrackBlob } from '../state/tracks';
 import { t } from '../i18n/ru';
 
-const FADE_DONE_MS = FADE.scene * 1000 + 300;
 const YT_STEP_MS = 100;
+
+/** Seconds of every fade in and out, from the mixer setting. */
+function fadeTime(): number {
+  return getGm().settings.ambient.fade ?? FADE.inOut;
+}
+
+const clock = () => performance.now() / 1000;
+
+/** The master as YouTube hears it: its own fade, applied on top of each channel's fade. */
+let masterFade: Fade | null = null;
 const YT_HOST_ID = 'yt-ambient';
 
 /** Whether the browser still waits for a click before it lets sound play. */
@@ -246,7 +258,6 @@ function youTubeSource(track: AmbientTrack): Source {
   let player: YTPlayer | null = null;
   let ready = false;
   let wantPlay = false;
-  let channel = 0;
   let sent = -1;
   let dead = false;
   let failed = false;
@@ -296,38 +307,20 @@ function youTubeSource(track: AmbientTrack): Source {
     }, START_CHECK_MS);
   };
   /**
-   * Volume = channel × master (YouTube is outside the Web Audio graph). Long fades go in 1 %
-   * steps every 100 ms: slow enough not to crackle, unlike the fast fades of before.
+   * Volume = channel fade × master fade (YouTube is outside the Web Audio graph): two separate
+   * fades, so neither cuts the other short. A ticker sends the product every 100 ms, in steps
+   * small enough not to crackle.
    */
-  let shown = 0; // volume the player has now, 0..1
-  let fadeTimer: ReturnType<typeof setInterval> | undefined;
-  const send = (v: number) => {
-    shown = v;
-    const n = Math.round(v * 100);
+  let channelFade: Fade = { from: 0, to: 0, start: 0, duration: 0 };
+  const apply = () => {
+    if (!ready) return;
+    const now = clock();
+    const level = masterFade ? fadeValue(masterFade, now) : masterGain();
+    const n = Math.round(fadeValue(channelFade, now) * level * 100);
     if (n !== sent) player!.setVolume(n);
     sent = n;
   };
-  const apply = (fade = 0) => {
-    if (!ready) return;
-    const target = channel * masterGain();
-    clearInterval(fadeTimer);
-    fadeTimer = undefined;
-    if (fade <= 0 || Math.abs(target - shown) < 0.005) {
-      send(target);
-      return;
-    }
-    const from = shown;
-    const t0 = performance.now();
-    fadeTimer = setInterval(() => {
-      const elapsed = (performance.now() - t0) / 1000;
-      send(fadeAt(from, target, elapsed, fade));
-      if (elapsed >= fade) {
-        clearInterval(fadeTimer);
-        fadeTimer = undefined;
-      }
-    }, YT_STEP_MS);
-  };
-  ytSources.add(apply);
+  const ticker = setInterval(apply, YT_STEP_MS);
   void loadYouTube()
     .then((YT) => {
       if (dead) return;
@@ -371,8 +364,8 @@ function youTubeSource(track: AmbientTrack): Source {
   return {
     meter: null,
     setGain(g, fade) {
-      channel = g;
-      apply(fade);
+      channelFade = retarget(channelFade, g, fade, clock());
+      apply();
     },
     play() {
       wantPlay = true;
@@ -391,16 +384,12 @@ function youTubeSource(track: AmbientTrack): Source {
       clearTimeout(check);
       setYtState(track.id, null);
       setNeedsClick(track.id, false);
-      ytSources.delete(apply);
-      clearInterval(fadeTimer);
-      clearInterval(fadeTimer);
+      clearInterval(ticker);
       player?.destroy();
       el.remove();
     },
   };
 }
-
-const ytSources = new Set<(fade?: number) => void>();
 
 // --- voices --------------------------------------------------------------------------------------
 
@@ -409,13 +398,15 @@ interface Voice {
   slot: AmbientSlot;
   track: AmbientTrack;
   source: Source;
-  active: boolean;
-  muted?: boolean; // channel mute last applied
+  active: boolean; // wanted on air (false: fading out, then paused)
+  leaving: boolean; // no longer in the mixer: fading out, then gone
+  target?: number; // gain the voice is heading for
+  muted?: boolean;
   stopTimer?: ReturnType<typeof setTimeout>;
 }
 
 let lastMasterMuted: boolean | undefined;
-let lastMasterGain: number | undefined;
+let lastMasterTarget: number | undefined;
 
 /** Moves an AudioParam to `value` along the even-in-dB fade curve, or at once. */
 function rampParam(c: AudioContext, p: AudioParam, value: number, fade: number) {
@@ -454,12 +445,15 @@ function blockedUntilGesture() {
 }
 
 /**
- * Brings the voices in line with the mixer. Files fade in and out; YouTube switches at once
- * (its stepwise volume made fades crackle). Paused globals keep their place; scene voices that
- * are no longer wanted stop for good, so a scene's sound starts over when the scene opens again.
+ * Brings the voices in line with the mixer. A voice changes its level only when its own target
+ * changes, so switching other layers never touches a fade in progress. Every way in or out
+ * (mute, add, remove, scene in and out, globals muted by a scene, master pause) fades over the
+ * mixer's fade time; only a moving fader follows at once. Paused globals keep their place;
+ * removed voices stop after their fade-out (YouTube players are kept, paused and rewound).
  */
 function reconcile() {
   const s = getGm();
+  const fade = fadeTime();
   const plan = mixPlan(globalChannels(s.settings.ambient), sceneAmbient(activeScene(s)), s.tracks);
   const wanted = new Set<string>();
   for (const p of plan) {
@@ -468,49 +462,68 @@ function reconcile() {
     let v = voices.get(key);
     const track = s.tracks[p.trackId];
     if (!v) {
-      if (!p.active) continue; // a muted global that never played yet
+      if (!p.active) continue; // a global muted by the scene that never played yet
       const source = track.source === 'youtube' ? takeYouTube(track) : fileSource(track);
-      v = { key, slot: p.slot, track, source, active: false };
+      v = { key, slot: p.slot, track, source, active: false, leaving: false };
       voices.set(key, v);
     }
     v.track = track;
-    clearTimeout(v.stopTimer);
-    if (p.active) {
-      // Mute is a slow fade; a new or returning voice fades in; a fader moves at once.
-      const youtube = track.source === 'youtube';
-      const fade =
-        v.muted !== undefined && v.muted !== p.muted
-          ? FADE.mute
-          : !v.active
-            ? youtube
-              ? 0
-              : FADE.scene
-            : FADE.fader;
-      v.muted = p.muted;
-      v.source.setGain(p.gain, fade);
-      if (!v.active) v.source.play();
-      v.active = true;
-    } else if (v.active) {
-      v.active = false;
-      fadeOut(v, false);
+    const target = p.active ? p.gain : 0;
+    const onlyFader =
+      !v.leaving && v.active === p.active && v.muted === p.muted && (v.target ?? 0) > 0 && target > 0;
+    v.muted = p.muted;
+    v.leaving = false;
+    if (target !== v.target) {
+      v.source.setGain(target, onlyFader ? FADE.fader : fade);
+      v.target = target;
     }
+    if (p.active && !v.active) {
+      clearTimeout(v.stopTimer);
+      v.stopTimer = undefined;
+      v.source.play();
+    } else if (!p.active && v.active) {
+      const voice = v;
+      clearTimeout(v.stopTimer);
+      v.stopTimer = setTimeout(
+        () => {
+          if (!voice.active) voice.source.pause(); // a global waits, paused, for the scene to end
+        },
+        fade * 1000 + 100,
+      );
+    } else if (p.active) {
+      clearTimeout(v.stopTimer); // came back during a pending stop
+      v.stopTimer = undefined;
+    }
+    v.active = p.active;
   }
   for (const v of [...voices.values()]) {
-    if (!wanted.has(v.key)) {
-      v.active = false;
-      fadeOut(v, true);
-    }
+    if (wanted.has(v.key) || v.leaving) continue;
+    v.leaving = true;
+    v.active = false;
+    if (v.target !== 0) v.source.setGain(0, fade);
+    v.target = 0;
+    clearTimeout(v.stopTimer);
+    v.stopTimer = setTimeout(
+      () => {
+        if (!v.leaving) return; // added back meanwhile
+        voices.delete(v.key);
+        if (v.track.source === 'youtube') releaseYouTube(v.track.id, v.source);
+        else v.source.destroy();
+      },
+      fade * 1000 + 100,
+    );
   }
-  // The master pause fades like a mute; the master fader follows the hand.
+  // The master: its pause fades like a mute, its fader follows the hand.
   const masterMuted = s.settings.ambient.muted;
-  const masterFade =
-    lastMasterMuted !== undefined && masterMuted !== lastMasterMuted ? FADE.mute : FADE.fader;
+  const masterTarget = masterGain();
+  if (masterTarget !== lastMasterTarget) {
+    const pauseToggled = lastMasterMuted !== undefined && masterMuted !== lastMasterMuted;
+    const d = pauseToggled ? fade : lastMasterTarget === undefined ? 0 : FADE.fader;
+    if (master && ctx) rampParam(ctx, master.gain, masterTarget, d);
+    masterFade = retarget(masterFade, masterTarget, d, clock());
+    lastMasterTarget = masterTarget;
+  }
   lastMasterMuted = masterMuted;
-  if (master && ctx) rampParam(ctx, master.gain, masterGain(), masterFade);
-  // YouTube players follow the master only when it changed: a channel fade must not be cut short.
-  const mg = masterGain();
-  if (mg !== lastMasterGain) for (const apply of ytSources) apply(masterFade);
-  lastMasterGain = mg;
   // Players of deleted tracks go for good.
   for (const [id, list] of ytCache) {
     if (s.tracks[id]) continue;
@@ -546,20 +559,6 @@ function releaseYouTube(trackId: Id, source: Source) {
   const entry = ytCache.get(trackId)?.find((c) => c.source === source);
   if (entry) entry.busy = false;
   else source.destroy();
-}
-
-function fadeOut(v: Voice, destroy: boolean) {
-  const youtube = v.track.source === 'youtube';
-  v.source.setGain(0, youtube ? 0 : FADE.scene);
-  const stop = () => {
-    if (destroy) {
-      voices.delete(v.key);
-      if (youtube) releaseYouTube(v.track.id, v.source);
-      else v.source.destroy();
-    } else v.source.pause();
-  };
-  if (youtube) stop();
-  else v.stopTimer = setTimeout(stop, FADE_DONE_MS);
 }
 
 // --- meters --------------------------------------------------------------------------------------
